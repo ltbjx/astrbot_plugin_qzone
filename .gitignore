@@ -1,1 +1,24 @@
 __pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 运行期数据（千万不要提交，里面可能有 Cookie / 说说内容）
+data/
+*.db
+*.db-shm
+*.db-wal
+liked_tids.json
+posts_*.db
+
+# 本地凭据
+cookie.txt
+qzone_cookie.txt
+.env
+*.local.json
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,51 @@
+NOTICE
+======
+
+本仓库是 astrbot_plugin_qzone 的派生版本（Fork），依据上游的 GNU General Public License v3.0 发布。
+
+上游项目
+--------
+名称：astrbot_plugin_qzone
+作者：Zhalslar
+地址：https://github.com/Zhalslar/astrbot_plugin_qzone
+基线版本：v3.1.3（commit 10bf854）
+许可证：GNU General Public License v3.0（见本仓库 LICENSE 文件）
+
+上游作者与贡献者保留其代码的全部著作权。本仓库对上游代码的修改同样以 GPL-3.0 授权。
+
+关于许可证的一个说明
+--------------------
+上游 README.md 中的徽章显示为 MIT，但上游仓库内的 LICENSE 文件实际是 GNU General Public
+License v3.0 全文。本项目以 LICENSE 文件为准，故本 Fork 亦采用 GPL-3.0。
+
+本 Fork 的修改
+--------------
+修改内容、原因与证据见：
+  - README.md（总览）
+  - docs/03-点赞失效根因报告.md（完整排查过程与证据链）
+  - docs/05-补丁清单.md（逐条补丁说明）
+  - patches/fork-vs-upstream.patch（相对上游的完整 diff）
+
+主要修改：
+  1. 修复点赞接口 unikey/curkey 必须使用 http:// 协议的问题（上游使用 https://，
+     导致接口返回成功但服务端忽略，点赞静默失效）。
+  2. 修复 core/qzone/client.py 在接口返回 data 为字符串时抛出
+     'str' object has no attribute 'get' 导致点赞流程崩溃的问题。
+  3. 修复定时任务因未设置 misfire_grace_time 而在错过调度后永久断链的问题。
+  4. 修复点赞接口调用失败仍被记录为成功的问题。
+  5. 新增 AutoLike 定时任务（只点赞不评论、本地去重、随机间隔防风控）。
+  6. 新增手工 Cookie 模式，使插件无需 QQ 客户端即可工作。
+  7. 新增 tools/qzone_check.py 点赞状态自查工具。
+  8. 补充中英文档与部署示例。
+
+第三方资源
+----------
+- 字体 core/renderer/resources/HYSongYunLangHeiW-1.ttf、各平台 logo 图片等资源随上游一同分发，
+  其权利归各自所有者，使用前请自行确认授权范围。
+- 表白墙功能的思路参考了 CampuxBot（https://github.com/idoknow/CampuxBot）。
+
+免责声明
+--------
+本项目为非官方第三方工具，与腾讯公司及 QQ 空间官方无任何关联。
+使用者需自行承担因使用自动化工具访问 QQ 空间而产生的一切后果，包括但不限于账号被限制、
+被风控等。请遵守相关服务条款，仅用于个人合法用途，并保持合理的请求频率。

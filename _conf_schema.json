@@ -204,10 +204,10 @@
                 "default": 20
             },
             "like_use_http_key": {
-                "description": "【补丁】点赞接口用 http 协议拼 unikey（兜底）",
-                "hint": "如果日志显示点赞成功、但空间里看不到点赞记录，把这项打开再试（社区 PR #47 的做法）",
+                "description": "【补丁】点赞接口用 http 协议拼 unikey（已实测必须开启）",
+                "hint": "★ 默认开启。浏览器里的点赞按钮携带的 unikey 就是 http:// 开头（实测抓包确认）；用 https:// 时接口照样返回 succ 但服务端忽略，点赞静默失效。除非你确认环境不同，否则别关",
                 "type": "bool",
-                "default": false
+                "default": true
             }
         }
     },

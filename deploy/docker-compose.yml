@@ -1,0 +1,35 @@
+# AstrBot 最小部署示例：只用 Docker 跑 AstrBot，插件走纯 Cookie 模式自动点赞
+#
+# 用法：
+#   mkdir -p /opt/qzone-bot/astrbot/data/plugins && cd /opt/qzone-bot
+#   cp <此文件> docker-compose.yml
+#   docker compose up -d
+#   cd astrbot/data/plugins && git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
+#   docker exec astrbot pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
+#       Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0"
+#   docker restart astrbot
+#
+# 说明：
+#   · 本方案不在服务器上运行任何 QQ 客户端（不需要 NapCat），
+#     因此不会把使用者的本机 / 手机 QQ 挤下线。
+#   · 需要放行入站端口 6185（AstrBot 面板），否则只能改配置文件。
+#   · 若还想用 NapCat 模式，请另外加一个 napcat 服务并映射 6099 / 3000。
+
+services:
+  astrbot:
+    image: soulter/astrbot:latest
+    container_name: astrbot
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+      # 可选：让容器内的 pip 默认走国内源
+      - PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+    ports:
+      - "6185:6185"
+    volumes:
+      - ./astrbot/data:/AstrBot/data
+    # 2G 内存的小机器建议加上限制，防止和别的服务互相挤爆
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 800M

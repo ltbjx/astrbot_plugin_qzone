@@ -1,0 +1,2766 @@
+diff --git a/.gitignore b/.gitignore
+index c18dd8d..997f384 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1 +1,24 @@
+ __pycache__/
++*.py[cod]
++*.egg-info/
++.venv/
++venv/
++
++# 运行期数据（千万不要提交，里面可能有 Cookie / 说说内容）
++data/
++*.db
++*.db-shm
++*.db-wal
++liked_tids.json
++posts_*.db
++
++# 本地凭据
++cookie.txt
++qzone_cookie.txt
++.env
++*.local.json
++
++# 编辑器 / 系统
++.DS_Store
++.idea/
++.vscode/
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 8a9e0d5..83d2ebd 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,46 @@
+ # Changelog
+ 
++## v3.2.0 — 增强 Fork
++
++> 本版本基于上游 v3.1.3（commit `10bf854`）。完整的排查过程与证据链见
++> [docs/03-点赞失效根因报告.md](docs/03-点赞失效根因报告.md)。
++
++### Bug 修复（严重）
++
++* **修复点赞静默失效**：点赞接口的 `unikey`/`curkey` 必须使用 `http://` 协议拼接。
++  上游使用 `https://`，接口会返回 `{"code":0,"message":"succ"}` 但**服务端直接忽略**，
++  导致"日志显示已点赞、空间里却没有赞"。新增 `trigger.like_use_http_key` 开关，**默认开启**。
++  依据来自动态流 HTML 中点赞按钮携带的 `data-unikey`（浏览器实际发送值）。
++* **修复点赞流程崩溃**：`core/qzone/client.py` 中写死 `parsed["data"].get("ret")`，
++  而点赞接口返回的 `data` 是字符串 `""`，必然抛
++  `'str' object has no attribute 'get'`。改为先判断 `isinstance(data, dict)`。
++* **修复定时任务永久断链**：任务采用「一次性任务链」，但 `add_job` 未设置
++  `misfire_grace_time`（APScheduler 默认仅 1 秒）。任务只要晚 1 秒执行就会被跳过，
++  而"排下一轮"写在被跳过的 `finally` 里，于是**任务链永久断掉、点赞静默失效且无任何报错**。
++  已设置 `misfire_grace_time=3600` 与 `coalesce=True`。
++* **修复点赞失败被记录为成功**：`PostService.like_posts()` 原本不检查返回值，
++  接口失败也照常打印「已点赞」并计入去重库。现在失败会抛出真实错误。
++* 修正日志中把偏移单位「秒」写成「分钟」的问题。
++
++### 新功能
++
++* **`AutoLike` 独立定时任务**：只点赞、不评论、不调用 LLM；带本地落盘去重
++  （`liked_tids.json`，保留最近 2000 条）与每条之间 8~20 秒随机间隔（防风控）。
++* **`trigger.like_only` 只点赞不评论模式**（默认开启）：不再自动评论好友动态；
++  上游的自动点赞挂在评论任务里，评论一旦失败会连带跳过点赞。
++* **手工 Cookie 模式**：新增 `qzone_cookie` 配置项，填写后无需 NapCat / QQ 客户端即可工作，
++  **不会把使用者本机或手机上的 QQ 挤下线**；Cookie 中除 `uin`/`skey`/`p_skey` 外的字段也会原样透传。
++* **`tools/qzone_check.py` 点赞状态自查工具**：从动态流的 `data-islike` 字段读取真实点赞状态，
++  支持 `--list` / `--like-latest` / `--like <unikey>` 并在点赞后自动回查，仅依赖标准库。
++
++### 文档
++
++* 新增 `docs/`：快速开始、配置详解、点赞失效根因报告、常见问题、补丁清单、服务器部署。
++* 新增 `NOTICE` 与 `patches/fork-vs-upstream.patch`（相对上游的完整 diff）。
++* 修正许可证说明：上游 README 徽章标注 MIT，但 `LICENSE` 文件实为 **GPL-3.0**，本 Fork 以文件为准。
++
++---
++
+ ## v3.1.3
+ 
+ * 统一使用内置卡片渲染器，Sender 直接创建并调用，移除工厂、协议与 pillowmd 回退分支。
+diff --git a/NOTICE b/NOTICE
+new file mode 100644
+index 0000000..4513800
+--- /dev/null
++++ b/NOTICE
+@@ -0,0 +1,51 @@
++NOTICE
++======
++
++本仓库是 astrbot_plugin_qzone 的派生版本（Fork），依据上游的 GNU General Public License v3.0 发布。
++
++上游项目
++--------
++名称：astrbot_plugin_qzone
++作者：Zhalslar
++地址：https://github.com/Zhalslar/astrbot_plugin_qzone
++基线版本：v3.1.3（commit 10bf854）
++许可证：GNU General Public License v3.0（见本仓库 LICENSE 文件）
++
++上游作者与贡献者保留其代码的全部著作权。本仓库对上游代码的修改同样以 GPL-3.0 授权。
++
++关于许可证的一个说明
++--------------------
++上游 README.md 中的徽章显示为 MIT，但上游仓库内的 LICENSE 文件实际是 GNU General Public
++License v3.0 全文。本项目以 LICENSE 文件为准，故本 Fork 亦采用 GPL-3.0。
++
++本 Fork 的修改
++--------------
++修改内容、原因与证据见：
++  - README.md（总览）
++  - docs/03-点赞失效根因报告.md（完整排查过程与证据链）
++  - docs/05-补丁清单.md（逐条补丁说明）
++  - patches/fork-vs-upstream.patch（相对上游的完整 diff）
++
++主要修改：
++  1. 修复点赞接口 unikey/curkey 必须使用 http:// 协议的问题（上游使用 https://，
++     导致接口返回成功但服务端忽略，点赞静默失效）。
++  2. 修复 core/qzone/client.py 在接口返回 data 为字符串时抛出
++     'str' object has no attribute 'get' 导致点赞流程崩溃的问题。
++  3. 修复定时任务因未设置 misfire_grace_time 而在错过调度后永久断链的问题。
++  4. 修复点赞接口调用失败仍被记录为成功的问题。
++  5. 新增 AutoLike 定时任务（只点赞不评论、本地去重、随机间隔防风控）。
++  6. 新增手工 Cookie 模式，使插件无需 QQ 客户端即可工作。
++  7. 新增 tools/qzone_check.py 点赞状态自查工具。
++  8. 补充中英文档与部署示例。
++
++第三方资源
++----------
++- 字体 core/renderer/resources/HYSongYunLangHeiW-1.ttf、各平台 logo 图片等资源随上游一同分发，
++  其权利归各自所有者，使用前请自行确认授权范围。
++- 表白墙功能的思路参考了 CampuxBot（https://github.com/idoknow/CampuxBot）。
++
++免责声明
++--------
++本项目为非官方第三方工具，与腾讯公司及 QQ 空间官方无任何关联。
++使用者需自行承担因使用自动化工具访问 QQ 空间而产生的一切后果，包括但不限于账号被限制、
++被风控等。请遵守相关服务条款，仅用于个人合法用途，并保持合理的请求频率。
+diff --git a/README.md b/README.md
+index a74572b..f62cfd5 100644
+--- a/README.md
++++ b/README.md
+@@ -1,124 +1,201 @@
+-
+ <div align="center">
+ 
+-![:name](https://count.getloli.com/@astrbot_plugin_qzone?name=astrbot_plugin_qzone&theme=minecraft&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto)
++# astrbot_plugin_qzone · 增强 Fork
+ 
+-# astrbot_plugin_qzone
++_✨ [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的 QQ空间对接插件 ✨_
+ 
+-_✨ [astrbot](https://github.com/AstrBotDevs/AstrBot) QQ空间对接插件 ✨_  
++[![AstrBot](https://img.shields.io/badge/AstrBot-4.x-orange)](https://github.com/AstrBotDevs/AstrBot)
++[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
++[![License](https://img.shields.io/badge/License-GPL--3.0-green)](./LICENSE)
+ 
+-[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+-[![AstrBot](https://img.shields.io/badge/AstrBot-3.4%2B-orange.svg)](https://github.com/Soulter/AstrBot)
+-[![GitHub](https://img.shields.io/badge/作者-Zhalslar-blue)](https://github.com/Zhalslar)
++**修复了上游「点赞显示成功但实际无效」的静默失效问题 · 支持不登录 QQ 客户端的纯 Cookie 模式 · 支持只点赞不评论**
+ 
+ </div>
+ 
+-## 🤝 介绍
++---
++
++## 这个 Fork 解决什么问题
++
++本仓库基于 [Zhalslar/astrbot_plugin_qzone](https://github.com/Zhalslar/astrbot_plugin_qzone) v3.1.3，在**真机联调**中定位并修复了 4 个会导致「自动点赞完全不可用」的问题。上游 README 里那句 **「点赞说说（接口显示成功，但实测点赞无效）」**，根因就在这里：
++
++| # | 问题 | 后果 | 状态 |
++|---|---|---|---|
++| 1 | 点赞接口的 `unikey`/`curkey` 用了 `https://`，而浏览器实际用 `http://` | 接口返回 `{"code":0,"message":"succ"}`，**但服务端直接忽略，赞根本没点上** | ✅ 已修复（`like_use_http_key`，**默认开启**） |
++| 2 | `core/qzone/client.py` 写死 `parsed["data"].get("ret")`，而点赞接口的 `data` 是**字符串** `""` | 抛 `'str' object has no attribute 'get'`，**点赞流程整体崩溃** | ✅ 已修复 |
++| 3 | 定时任务用「一次性任务链」却没设 `misfire_grace_time` | 任务只要晚 1 秒执行就被跳过，**下一轮永远不会被排上 → 点赞永久静默失效** | ✅ 已修复 |
++| 4 | 调完点赞接口不看返回值，直接打印「已点赞」 | 失败也报成功，**假日志** | ✅ 已修复（失败抛错） |
++
++> 完整的排查过程、证据链和复现方法见 **[docs/03-点赞失效根因报告.md](docs/03-点赞失效根因报告.md)**。这是本 Fork 最值得阅读的一篇文档。
++
++## 新增能力
++
++- 🍪 **纯 Cookie 模式（免登录 QQ 客户端）**
++  服务器上**不需要 NapCat、不需要扫码登录 QQ**。只需从浏览器复制一次 QQ空间 Cookie，插件直接调空间接口。
++  → 不会像 NapCat 那样以「电脑端」身份登录，**不会把你本机 / 手机上的 QQ 挤下线**。
++
++- 👍 **只点赞不评论模式（`like_only`）**
++  上游的自动点赞**挂在自动评论任务里**：会先用 LLM 给好友动态挨个评论，评论失败还会跳过点赞。
++  开启后走独立的 `AutoLike` 任务：**只点赞、不评论、不调 LLM**，并带**本地去重**（不会重复点同一条）与**随机间隔**（防风控）。
++
++- 🔍 **点赞状态自查工具（`tools/qzone_check.py`）**
++  不依赖日志自说自话，直接从动态流里读 `data-islike` 字段，**验证赞到底有没有真的点上**。
++
++- 🛠 **配置项全部可视化**：所有新增开关都在 AstrBot 插件配置面板里，不用改代码。
++
++## 特性一览（含上游原有功能）
++
++- 定时自动点赞好友动态（本 Fork 新增的独立任务）
++- 只点赞不评论 / 评论时顺便点赞，两种模式可选
++- 查看 / 评论 / 点赞说说，支持 `@某人` 与序号、范围语法（`2~5`）
++- 定时自动发说说、AI 写说说（需配置 LLM）
++- 校园表白墙：投稿、匿名投稿、审核过稿 / 拒稿
++- 查看空间访客
++- 说说卡片图片渲染（内置渲染器）
++
++---
++
++## ⚠️ 使用前必读
++
++1. **本项目为非官方第三方工具**，与腾讯 / QQ空间官方无关。使用自动化脚本访问 QQ空间**存在账号被限流或风控的风险**，请自行评估并自担后果。
++2. **Cookie 等于你的空间登录凭证**。不要提交到 Git、发到群里或粘贴到公开场所。`.gitignore` 已默认排除相关文件。
++3. 请**合理设置频率**。默认「每 2 小时一次、每次最多 20 条、每条间隔 8~20 秒随机」是相对保守的参数，不建议调得更激进。
++4. **不要用它去刷陌生人的空间**。给好友点赞是社交行为，滥用会给你自己带来麻烦。
+ 
+-QQ空间对接插件, 可自动发说说、表白墙投稿审核、查看说说、点赞、评论等
++## 🚀 快速开始
+ 
+-## 📦 安装
++### 方式一：纯 Cookie 模式（推荐，服务器上不登 QQ）
+ 
+-- 直接在astrbot的插件市场搜索astrbot_plugin_qzone，点击安装，等待完成即可
++**适合**：只想让它自动点赞，不希望服务器登录 QQ（避免挤掉自己电脑 / 手机的 QQ）。
+ 
+-- 也可以克隆源码到插件文件夹：
++**第 1 步：安装插件**
+ 
+ ```bash
+-# 克隆仓库到插件目录
+ cd /AstrBot/data/plugins
+-git clone https://github.com/Zhalslar/astrbot_plugin_qzone
++git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
+ 
+-# 控制台重启AstrBot
++# 安装依赖（国内建议走清华源）
++pip install -r astrbot_plugin_qzone/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
++
++# 重启 AstrBot
+ ```
+ 
+-## ⌨️ 配置
++> Docker 部署的话：`docker exec astrbot pip install -i https://pypi.tuna.tsinghua.edu.cn/simple Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0" && docker restart astrbot`
+ 
+-请前往插件配置面板进行配置
++**第 2 步：拿一份 QQ空间 Cookie**
+ 
+-说说和系统消息统一使用内置卡片渲染器，不再需要配置渲染器或外部样式目录。卡片渲染未生成图片时，发送原始文本。
++1. 电脑浏览器打开 `https://user.qzone.qq.com/<你的QQ号>`，确认已登录
++2. 按 `F12` → **Network / 网络** → 按 `F5` 刷新
++3. 右键任意一条发往 `user.qzone.qq.com` 的请求 → **Copy → Copy as cURL**
++4. 从里面取出 `cookie:` 那一行的值（**必须含 `p_skey` 和 `uin`**）
+ 
+-### 定时调度说明
++> 更省事的办法：**用 QQ 客户端的内嵌浏览器打开你的空间**。QQ 客户端那套浏览器的 Cookie 库是**明文存储**的，可以直接读出来，不用手动复制。
++> 注意：`p_skey` 是 HttpOnly，在控制台敲 `document.cookie` **取不到**，必须从请求头或 DevTools 的 Application 面板拿。
+ 
+-- `publish_cron` / `comment_cron` 现在表示任务的**基准时间**（Cron 表达式：分 时 日 月 周）。
+-- `publish_offset_minutes` / `comment_offset_minutes` 表示围绕基准时间的随机前后浮动范围（单位分钟，`±N`）。
+-- 例如：`publish_cron = 30 23 * * *` 且 `publish_offset_minutes = 30`，表示每天会在 `23:00 ~ 24:00` 间随机执行一次自动发说说。
+-- 将偏移设为 `0` 可关闭浮动，严格按 Cron 时间触发。
++**第 3 步：填配置**
+ 
+-## 🐔 使用说明（QzonePlugin）
++AstrBot 面板 → 插件 → QQ空间 → 配置：
+ 
+-### 一、基础说明
++| 配置项 | 填什么 |
++|---|---|
++| `qzone_cookie` | 粘贴上一步的 Cookie（**填了它就不需要 QQ 客户端**） |
++| `trigger.like_only` | `true`（只点赞不评论） |
++| `trigger.like_cron` | `0 */2 * * *`（每 2 小时一次；留空则关闭） |
++| `trigger.comment_cron` / `publish_cron` | 留空（纯点赞模式下用不到） |
+ 
+-- **默认查看的是“好友动态流”**
+-- **@某人 / @QQ号**：表示查看该用户的 QQ 空间
+-- **序号从 0 开始**
+-  - `0` = 最新一条
+-  - `-1` = 最后一条
+-- 支持 **范围语法**：`2~5`
+-- 机器人在需要评论 / 回复时，会 **自动排除自己的评论**
++**第 4 步：验证**
+ 
++```bash
++export QZONE_COOKIE='你的Cookie'
++python3 tools/qzone_check.py --list          # 看动态流里每条动态的真实点赞状态
++python3 tools/qzone_check.py --like-latest   # 点赞最新一条并自动回查是否真的生效
++```
+ 
+-### 二、命令一览表
++### 方式二：NapCat 模式（需要 QQ 客户端在服务器上登录）
+ 
+-| 命令 | 别名 | 权限 | 参数 | 功能说明 |
+-|----|----|----|----|----|
+-| 查看访客 | - | ADMIN | - | 查看 QQ 空间最近访客列表 |
+-| 看说说 | 查看说说 | ALL | `[@用户] [序号/范围]` | 查看说说（自动拉取完整详情） |
+-| 评说说 | 评论说说、读说说 | ALL | `[@用户] [序号/范围]` | 给说说评论（可配置自动点赞） |
+-| 赞说说 | - | ALL | `[@用户] [序号/范围]` | 给说说点赞 |
+-| 发说说 | - | ADMIN | `<文本> [图片]` | 立即发布一条说说 |
+-| 写说说 | 写稿 | ADMIN | `<主题> [图片]` | AI 生成草稿，保存为待审核稿件 |
+-| 删说说 | - | ADMIN | `<序号>` | 删除自己发布的说说 |
+-| 回评 | 回复评论 | ALL | `<稿件ID> [评论序号]` | 回复评论（默认回复最后一条非自己评论） |
+-| 投稿 | - | ALL | `<文本> [图片]` | 向表白墙投稿 |
+-| 匿名投稿 | - | ALL | `<文本> [图片]` | 匿名投稿到表白墙 |
+-| 看稿 | 查看稿件 | ADMIN | `[稿件ID]` | 查看稿件（默认最新） |
+-| 过稿 | 通过稿件、通过投稿 | ADMIN | `<稿件ID>` | 审核并发布稿件 |
+-| 拒稿 | 拒绝稿件、拒绝投稿 | ADMIN | `<稿件ID> [原因]` | 拒绝稿件 |
+-| 撤稿 | - | ALL | `<稿件ID>` | 撤回自己投稿的稿件 |
+-
+-## 三、范围参数使用示例
+-
+-```text
+-看说说
+-看说说 2
+-看说说 1~3
+-看说说 @某人
+-看说说 @某人 0
+-```
++**适合**：除了点赞，还想用机器人的群聊互动 / 发说说 / 表白墙等功能。
++
++此时**不要**填 `qzone_cookie`，插件会通过 OneBot 的 `get_cookies` 从 NapCat 自动获取登录态。
++
++> ⚠️ NapCat 是以「电脑端」身份登录 QQ 的，同一个号不能同时登两台电脑 —— **服务器一登，你本机 QQ 会被挤下线**（手机不受影响）。不能接受这点就用方式一。
+ 
+-### 效果图
++## ⚙️ 配置详解
+ 
+-## 💡 TODO
++完整字段说明见 **[docs/02-配置详解.md](docs/02-配置详解.md)**，这里只列本 Fork 新增的部分：
+ 
+-- [x] 发说说
+-- [x] 校园表白墙功能：投稿、审核投稿
+-- [x] 点赞说说（接口显示成功，但实测点赞无效）
+-- [x] 评论说说
+-- [x] 定时自动发说说、日记
+-- [x] 定时自动评论、点赞好友的说说
+-- [x] LLM发说说
+-- [ ] LLM配图
+-- [ ] 自动上网冲浪写说说
++| 配置项 | 类型 | 默认 | 说明 |
++|---|---|---|---|
++| `qzone_cookie` | text | 空 | 手工 QQ空间 Cookie。**填了就优先用它**，服务器无需登录 QQ |
++| `trigger.like_only` | bool | `true` | 只点赞不评论。开启后 `AutoComment` 自动跳过，点赞交给 `AutoLike` |
++| `trigger.like_cron` | string | `0 */2 * * *` | 自动点赞的基准时间（Cron）。**留空 = 关闭自动点赞** |
++| `trigger.like_offset` | int | `900` | 围绕基准时间随机前后浮动的秒数（打散时间特征） |
++| `trigger.like_num` | int | `20` | 每轮最多处理动态流最新 N 条 |
++| `trigger.like_delay_min` / `like_delay_max` | int | `8` / `20` | 每条点赞之间的随机间隔（秒），防风控 |
++| `trigger.like_use_http_key` | bool | **`true`** | 点赞接口用 `http://` 拼 `unikey`。**实测必须开启**，关掉点赞就会静默失效 |
+ 
+-## 👥 贡献指南
++### 定时任务语义（上游设计 + 本 Fork 的修复）
+ 
+-- 🌟 Star 这个项目！（点右上角的星星，感谢支持！）
+-- 🐛 提交 Issue 报告问题
+-- 💡 提出新功能建议
+-- 🔧 提交 Pull Request 改进代码
++- `*_cron` 是**基准时间**，`*_offset` 是围绕它随机浮动的**秒数**。
++  例：`like_cron = 0 */2 * * *` + `like_offset = 900` → 每两小时一次，实际执行时间在基准点前后 15 分钟内随机。
++- 上游用「一次性任务链」（本轮跑完才排下一轮），**且没有设置宽限期**：任务只要晚 1 秒执行，APScheduler 会直接跳过，而下一轮永远不会被排上 —— 任务链就此断掉、**点赞永久静默失效**。本 Fork 已加 `misfire_grace_time=3600`。
+ 
+-## 📌 注意事项
++## 🐛 排查与验证
+ 
+-- 想第一时间得到反馈的可以来作者的插件反馈群（QQ群）：460973561（不点star不给进）
++| 需求 | 做法 |
++|---|---|
++| 看点赞有没有真的生效 | `python3 tools/qzone_check.py --list` |
++| 看插件运行日志 | `docker logs -f astrbot \| grep -E "AutoLike\|已点赞"` |
++| 判断 Cookie 是否过期 | 日志出现「登录状态失效，请重新登录后重试」即为过期，重新复制一次即可 |
++| 完整排查方法论 | **[docs/03-点赞失效根因报告.md](docs/03-点赞失效根因报告.md)** |
++| 常见问题 | **[docs/04-常见问题.md](docs/04-常见问题.md)** |
+ 
+-## 🤝 鸣谢
++## 📖 命令一览（继承自上游）
++
++> 序号从 `0` 开始（`0` = 最新一条，`-1` = 最后一条），支持范围语法 `2~5`；`@某人` 表示操作该用户的空间。
++
++| 命令 | 别名 | 权限 | 参数 | 功能 |
++|---|---|---|---|---|
++| 查看访客 | - | ADMIN | - | 查看空间最近访客 |
++| 看说说 | 查看说说 | ALL | `[@用户] [序号/范围]` | 查看说说 |
++| 评说说 | 评论说说、读说说 | ALL | `[@用户] [序号/范围]` | 评论说说（可配置自动点赞） |
++| 赞说说 | - | ALL | `[@用户] [序号/范围]` | 给说说点赞 |
++| 发说说 | - | ADMIN | `<文本> [图片]` | 立即发布说说 |
++| 写说说 | 写稿 | ADMIN | `<主题> [图片]` | AI 生成草稿 |
++| 删说说 | - | ADMIN | `<序号>` | 删除自己发的说说 |
++| 回评 | 回复评论 | ALL | `<稿件ID> [评论序号]` | 回复评论 |
++| 投稿 / 匿名投稿 | - | ALL | `<文本> [图片]` | 向表白墙投稿 |
++| 看稿 / 过稿 / 拒稿 / 撤稿 | - | 混合 | `<稿件ID>` | 表白墙稿件管理 |
++
++## 📁 目录结构
++
++```
++astrbot_plugin_qzone/
++├── main.py                     # 插件入口（本 Fork 增加了 AutoLike 注册）
++├── metadata.yaml
++├── requirements.txt
++├── _conf_schema.json           # 配置面板定义（含本 Fork 新增项）
++├── core/
++│   ├── scheduler.py            # 定时任务（本 Fork 新增 AutoLike 任务）
++│   ├── service.py              # 业务服务（本 Fork 让点赞失败不再谎报成功）
++│   ├── qzone/
++│   │   ├── api.py              # 空间接口封装（本 Fork 增加 http unikey 开关）
++│   │   ├── client.py           # HTTP 客户端（本 Fork 修复 data 为字符串时崩溃）
++│   │   ├── session.py          # 登录态（本 Fork 增加手工 Cookie 支持）
++│   │   └── model.py            # 请求上下文（本 Fork 支持 Cookie 字段透传）
++│   └── ...
++├── docs/                       # 完整文档
++├── tools/qzone_check.py        # 点赞状态自查工具
++└── pages/dashboard/            # 面板前端页面
++```
+ 
+-- 部分代码参考了[CampuxBot项目](https://github.com/idoknow/CampuxBot)，由作者之一的Soulter推荐
++## 🤝 贡献
+ 
+-- [QQ 空间爬虫之爬取说说](https://kylingit.com/blog/qq-空间爬虫之爬取说说/)
+-  感谢这篇博客提供的思路。
++- 上游项目：[Zhalslar/astrbot_plugin_qzone](https://github.com/Zhalslar/astrbot_plugin_qzone) —— 请优先给上游点 Star
++- 本 Fork 的补丁清单与逐条说明：[docs/05-补丁清单.md](docs/05-补丁清单.md)
++- 提交 Issue 时请附上：AstrBot 版本、`AutoLike` 相关日志、`tools/qzone_check.py --list` 的输出（**记得打码 Cookie**）
+ 
+-- [一个QQ空间爬虫项目](https://github.com/wwwpf/QzoneExporter)
++## 📄 许可证与致谢
+ 
+-- [QQ空间](https://qzone.qq.com/) 网页显示本地数据时使用的样式与布局均来自于QQ空间。
++- 本仓库沿用上游的 **GNU General Public License v3.0**（见 [LICENSE](./LICENSE)）。
++  > 📌 上游 README 的徽章写的是 MIT，但仓库里的 `LICENSE` 文件实际是 **GPL-3.0**。以文件为准，本 Fork 因此同样采用 GPL-3.0。
++- 上游作者：**Zhalslar**；表白墙部分参考了 [CampuxBot](https://github.com/idoknow/CampuxBot)
++- 本 Fork 的排查、补丁与文档：由 **AI Agent（DeepSeek Harness）** 在真机联调中完成，详见 [NOTICE](./NOTICE)
+diff --git a/_conf_schema.json b/_conf_schema.json
+index c37a2dc..d237a9c 100644
+--- a/_conf_schema.json
++++ b/_conf_schema.json
+@@ -4,6 +4,11 @@
+         "type": "string",
+         "hint": "bot收到的投稿将在管理群里审批, 不填则将审批信息私发给bot管理员"
+     },
++    "qzone_cookie": {
++        "description": "【补丁】QQ空间 Cookie（手工填写，填了就不需要登录 QQ）",
++        "type": "text",
++        "hint": "从浏览器登录 user.qzone.qq.com 后，F12 → Network → 任意 user.qzone.qq.com 请求 → 复制整行 cookie 的值粘到这里（必须包含 p_skey 和 uin）。填了这项，服务器上完全不需要 NapCat / QQ 客户端，也不会把你本机 QQ 挤下线。过期后点赞会失败，需要重新复制一次"
++    },
+     "llm": {
+         "description": "LLM模块配置",
+         "type": "object",
+@@ -141,6 +146,68 @@
+                 "hint": "在评论完说说后会自动给此说说点赞",
+                 "type": "bool",
+                 "default": true
++            },
++            "like_only": {
++                "description": "【补丁】只点赞不评论",
++                "hint": "开启后，定时任务不再自动评论好友说说，只做点赞（点赞交给下面的「自动点赞」任务）。想恢复官方行为就关掉它",
++                "type": "bool",
++                "default": true
++            },
++            "like_cron": {
++                "description": "【补丁】自动点赞的基准触发时间",
++                "hint": "Cron 表达式（分 时 日 月 周）。留空表示禁用自动点赞。例如 “0 */2 * * *” 表示每 2 小时一次",
++                "type": "string",
++                "default": "0 */2 * * *"
++            },
++            "like_offset": {
++                "description": "【补丁】自动点赞的时间偏移（秒）",
++                "hint": "围绕基准时间随机前后浮动，避免每次都在同一分钟发起请求",
++                "type": "int",
++                "slider": {
++                    "min": 0,
++                    "max": 3600,
++                    "step": 1
++                },
++                "default": 900
++            },
++            "like_num": {
++                "description": "【补丁】每轮最多点赞多少条动态",
++                "hint": "只处理动态流里最新的 N 条，已点过赞的会自动跳过（本地去重）",
++                "type": "int",
++                "slider": {
++                    "min": 1,
++                    "max": 50,
++                    "step": 1
++                },
++                "default": 20
++            },
++            "like_delay_min": {
++                "description": "【补丁】点赞最小间隔（秒）",
++                "hint": "每条点赞之间随机等待的秒数下限，防风控",
++                "type": "int",
++                "slider": {
++                    "min": 0,
++                    "max": 120,
++                    "step": 1
++                },
++                "default": 8
++            },
++            "like_delay_max": {
++                "description": "【补丁】点赞最大间隔（秒）",
++                "hint": "每条点赞之间随机等待的秒数上限，防风控",
++                "type": "int",
++                "slider": {
++                    "min": 0,
++                    "max": 300,
++                    "step": 1
++                },
++                "default": 20
++            },
++            "like_use_http_key": {
++                "description": "【补丁】点赞接口用 http 协议拼 unikey（已实测必须开启）",
++                "hint": "★ 默认开启。浏览器里的点赞按钮携带的 unikey 就是 http:// 开头（实测抓包确认）；用 https:// 时接口照样返回 succ 但服务端忽略，点赞静默失效。除非你确认环境不同，否则别关",
++                "type": "bool",
++                "default": true
+             }
+         }
+     },
+diff --git a/core/config.py b/core/config.py
+index 02fbc3a..1bc6412 100644
+--- a/core/config.py
++++ b/core/config.py
+@@ -145,6 +145,21 @@ class TriggerConfig(ConfigNode):
+     read_prob: float
+     send_admin: bool
+     like_when_comment: bool
++    # ===== 本地补丁新增：纯点赞模式 =====
++    like_only: bool
++    """True = 自动任务只点赞不评论（AutoComment 自动跳过）"""
++    like_cron: str
++    """自动点赞任务的基准触发时间（Cron: 分 时 日 月 周）"""
++    like_offset: int
++    """自动点赞时间偏移（秒），围绕基准时间随机 ±N 秒"""
++    like_num: int
++    """自动点赞每轮最多处理多少条动态"""
++    like_delay_min: int
++    """每条点赞之间的最小间隔（秒），防风控"""
++    like_delay_max: int
++    """每条点赞之间的最大间隔（秒），防风控"""
++    like_use_http_key: bool
++    """True = 点赞接口 unikey/curkey 使用 http://（社区 PR #47 的兜底做法）"""
+ 
+ 
+ class PluginConfig(ConfigNode):
+@@ -155,6 +170,9 @@ class PluginConfig(ConfigNode):
+     cookie_ttl: int
+     timeout: int
+     show_name: bool
++    # ===== 本地补丁新增：手工 Cookie（不依赖 NapCat / 不登录 QQ 客户端）=====
++    qzone_cookie: str
++    """手工填写的 QQ空间 Cookie（含 p_skey）。填了就优先用它，服务器无需登录 QQ"""
+ 
+     _DB_VERSION = 5
+     _plugin_name = "astrbot_plugin_qzone"
+diff --git a/core/qzone/api.py b/core/qzone/api.py
+index 30155ad..b2a7c1e 100644
+--- a/core/qzone/api.py
++++ b/core/qzone/api.py
+@@ -17,6 +17,9 @@ class QzoneAPI(QzoneHttpClient):
+     """QQ 空间 HTTP API 封装"""
+ 
+     BASE_URL = "https://user.qzone.qq.com"
++    # 本地补丁：点赞接口的 unikey/curkey 在某些情况下必须是 http:// 协议
++    # 参考社区 PR Zhalslar/astrbot_plugin_qzone#47（作者未合并，做成开关兜底）
++    BASE_URL_HTTP = "http://user.qzone.qq.com"
+     UPLOAD_IMAGE_URL = "https://up.qzone.qq.com/cgi-bin/upload/cgi_upload_image"
+     EMOTION_URL = "https://user.qzone.qq.com/proxy/domain/taotao.qzone.qq.com/cgi-bin/emotion_cgi_publish_v6"
+     DOLIKE_URL = "https://user.qzone.qq.com/proxy/domain/w.qzone.qq.com/cgi-bin/likes/internal_dolike_app"
+@@ -121,6 +124,12 @@ class QzoneAPI(QzoneHttpClient):
+         点赞指定说说
+         """
+         ctx = await self.session.get_ctx()
++        # 本地补丁：unikey/curkey 的协议可切换（https 默认，http 兜底）
++        key_base = (
++            self.BASE_URL_HTTP
++            if getattr(self.cfg.trigger, "like_use_http_key", False)
++            else self.BASE_URL
++        )
+         raw = await self.request(
+             "POST",
+             self.DOLIKE_URL,
+@@ -130,8 +139,8 @@ class QzoneAPI(QzoneHttpClient):
+             data={
+                 "qzreferrer": f"{self.BASE_URL}/{ctx.uin}",  # 来源
+                 "opuin": ctx.uin,  # 操作者QQ
+-                "unikey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",  # 动态唯一标识
+-                "curkey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",  # 要操作的动态对象
++                "unikey": f"{key_base}/{post.uin}/mood/{post.tid}",  # 动态唯一标识
++                "curkey": f"{key_base}/{post.uin}/mood/{post.tid}",  # 要操作的动态对象
+                 "appid": 311,  # 应用ID(说说:311)
+                 "from": 1,  # 来源
+                 "typeid": 0,  # 类型ID
+diff --git a/core/qzone/client.py b/core/qzone/client.py
+index c808074..ef34080 100644
+--- a/core/qzone/client.py
++++ b/core/qzone/client.py
+@@ -60,11 +60,18 @@ class QzoneHttpClient:
+             parsed[QZONE_INTERNAL_META_KEY] = meta
+         meta[QZONE_INTERNAL_HTTP_STATUS_KEY] = resp.status
+ 
++        # 本地补丁：上游这里假定 data 一定是 dict，但点赞等接口返回的 data 是字符串，
++        # 会直接抛 'str' object has no attribute 'get'，导致点赞流程整体崩掉。
++        data_field = parsed.get("data")
++
+         # 仅在明确登录失效时触发重登
+         if (
+             resp.status == HTTP_STATUS_UNAUTHORIZED
+             or parsed.get("code") == QZONE_CODE_LOGIN_EXPIRED
+-            or parsed.get("data", {}).get("ret") == QZONE_CODE_IMAGE_EXPIRED
++            or (
++                isinstance(data_field, dict)
++                and data_field.get("ret") == QZONE_CODE_IMAGE_EXPIRED
++            )
+         ):
+             if retry >= 2:
+                 raise RuntimeError("登录失效，重试失败")
+diff --git a/core/qzone/model.py b/core/qzone/model.py
+index e957ced..1dc45dd 100644
+--- a/core/qzone/model.py
++++ b/core/qzone/model.py
+@@ -7,10 +7,18 @@ from .constants import QZONE_CODE_OK, QZONE_CODE_UNKNOWN, QZONE_INTERNAL_META_KE
+ class QzoneContext:
+     """统一封装 Qzone 请求所需的所有动态参数"""
+ 
+-    def __init__(self, uin: int, skey: str, p_skey: str):
++    def __init__(
++        self,
++        uin: int,
++        skey: str,
++        p_skey: str,
++        extra_cookies: dict[str, str] | None = None,
++    ):
+         self.uin = uin
+         self.skey = skey
+         self.p_skey = p_skey
++        # 本地补丁：手工 Cookie 模式下把浏览器里的其余字段也原样带上，提高接口成功率
++        self.extra_cookies: dict[str, str] = extra_cookies or {}
+ 
+     @property
+     def gtk2(self) -> str:
+@@ -21,11 +29,15 @@ class QzoneContext:
+         return str(hash_val & 0x7FFFFFFF)
+ 
+     def cookies(self) -> dict[str, str]:
+-        return {
+-            "uin": f"o{self.uin}",
+-            "skey": self.skey,
+-            "p_skey": self.p_skey,
+-        }
++        cookies = dict(self.extra_cookies)
++        cookies.update(
++            {
++                "uin": f"o{self.uin}",
++                "skey": self.skey,
++                "p_skey": self.p_skey,
++            }
++        )
++        return cookies
+ 
+     def headers(self) -> dict[str, str]:
+         return {
+diff --git a/core/qzone/session.py b/core/qzone/session.py
+index 30c72c4..17d21ab 100644
+--- a/core/qzone/session.py
++++ b/core/qzone/session.py
+@@ -53,28 +53,47 @@ class QzoneSession:
+             return self._ctx
+ 
+     async def _refresh_ctx_locked(self) -> QzoneContext:
+-        if not self.cfg.client:
+-            raise RuntimeError("CQHttp 实例不存在")
+-
+-        payload = await self.cfg.client.get_cookies(domain=self.DOMAIN)
+-        cookies_str = ""
+-        if isinstance(payload, dict):
+-            cookies_str = str(payload.get("cookies") or "").strip()
+-        if not cookies_str:
+-            raise RuntimeError("get_cookies 未返回可用 Cookie")
++        # 本地补丁：优先使用手工配置的 Cookie，这样服务器上不需要登录 QQ 客户端
++        # （NapCat 会以“电脑端”身份登录，会把用户本机 QQ 挤下线）
++        cookies_str = str(getattr(self.cfg, "qzone_cookie", "") or "").strip()
++
++        if cookies_str:
++            logger.debug("使用配置中的手工 QQ空间 Cookie")
++        else:
++            if not self.cfg.client:
++                raise RuntimeError(
++                    "既没有配置 qzone_cookie，也没有可用的 CQHttp 实例（NapCat）："
++                    "请在插件配置里填入 QQ空间 Cookie"
++                )
++            payload = await self.cfg.client.get_cookies(domain=self.DOMAIN)
++            if isinstance(payload, dict):
++                cookies_str = str(payload.get("cookies") or "").strip()
++            if not cookies_str:
++                raise RuntimeError("get_cookies 未返回可用 Cookie")
++
++        # 兼容直接粘贴整行 "Cookie: xxx" 或带换行的写法
++        cookies_str = cookies_str.replace("\n", "; ").replace("\r", " ")
++        if cookies_str.lower().startswith("cookie:"):
++            cookies_str = cookies_str[len("cookie:") :].strip()
+ 
+         c = {k: v.value for k, v in SimpleCookie(cookies_str).items()}
+         uin_text = c.get("uin", "0")
+         uin_raw = uin_text[1:] if uin_text[:1].lower() == "o" else uin_text
+         uin = int(uin_raw) if uin_raw.isdigit() else 0
+         if not uin:
+-            raise RuntimeError("Cookie 中缺少合法 uin")
++            raise RuntimeError("Cookie 中缺少合法 uin（请确认复制的是 user.qzone.qq.com 的完整 Cookie）")
+ 
+         self._last_refresh_at = monotonic()
++        extra = {
++            k: v
++            for k, v in c.items()
++            if k.lower() not in ("uin", "skey", "p_skey")
++        }
+         return QzoneContext(
+             uin=uin,
+             skey=c.get("skey", ""),
+             p_skey=c.get("p_skey", "") or c.get("skey", ""),
++            extra_cookies=extra,
+         )
+ 
+     def _is_cookie_expired(self) -> bool:
+diff --git a/core/scheduler.py b/core/scheduler.py
+index c4ae532..e02c736 100644
+--- a/core/scheduler.py
++++ b/core/scheduler.py
+@@ -1,6 +1,9 @@
++import asyncio
++import json
+ import random
+ import zoneinfo
+ from datetime import datetime, timedelta
++from pathlib import Path
+ 
+ from apscheduler.schedulers.asyncio import AsyncIOScheduler
+ from apscheduler.triggers.cron import CronTrigger
+@@ -39,7 +42,7 @@ class AutoRandomCronTask:
+         self._register_task()
+ 
+         logger.info(
+-            f"[{self.job_name}] 已启动，任务周期：{self.cron_expr}，偏移范围：±{self.offset_seconds} 分钟"
++            f"[{self.job_name}] 已启动，任务周期：{self.cron_expr}，偏移范围：±{self.offset_seconds} 秒"
+         )
+ 
+     def _register_task(self):
+@@ -89,6 +92,11 @@ class AutoRandomCronTask:
+                 trigger=DateTrigger(run_date=target_time, timezone=self.timezone),
+                 name=f"{self.job_name}_once_{int(base_time.timestamp())}",
+                 max_instances=1,
++                # 本地补丁：上游没设宽限期，任务只要晚 1 秒执行就会被 APScheduler 直接跳过，
++                # 而“下一轮”是在本轮执行完才排的 —— 于是整条任务链永久断掉、静默失效。
++                # 给 1 小时宽限，错过也补跑。
++                misfire_grace_time=3600,
++                coalesce=True,
+             )
+         except Exception as e:
+             if self._terminated:
+@@ -140,6 +148,11 @@ class AutoComment(AutoRandomCronTask):
+         self.sender = sender
+ 
+     async def do_task(self):
++        # 本地补丁：纯点赞模式下不自动评论好友说说（点赞交给 AutoLike 任务）
++        if getattr(self.cfg.trigger, "like_only", False):
++            logger.info("[AutoComment] like_only 已开启，跳过本轮自动评论")
++            return
++
+         posts = await self.service.query_feeds(
+             pos=0,
+             num=20,
+@@ -180,3 +193,88 @@ class AutoPublish(AutoRandomCronTask):
+             return
+         post = await self.service.publish_post(text=text)
+         await self.sender.send_admin_post(post, message="定时发说说")
++
++
++class AutoLike(AutoRandomCronTask):
++    """
++    本地补丁新增：定时扫描好友动态流并自动点赞。
++
++    与官方 AutoComment 的区别：
++    - 只点赞，不评论（不需要 LLM）
++    - 用本地 JSON 记录已点赞的 tid 去重，不会每轮重复点赞同一条
++    - 每条点赞之间有随机间隔，降低风控概率
++    """
++
++    _STORE_LIMIT = 2000
++
++    def __init__(
++        self,
++        config: PluginConfig,
++        service: PostService,
++        sender: Sender,
++    ):
++        cron = config.trigger.like_cron
++        timezone = config.timezone
++        offset = config.trigger.like_offset
++        super().__init__("AutoLike", cron, timezone, offset)
++        self.cfg = config
++        self.service = service
++        self.sender = sender
++        self._store_path = Path(config.data_dir) / "liked_tids.json"
++        self._liked: list[str] = self._load_liked()
++
++    def _load_liked(self) -> list[str]:
++        try:
++            if self._store_path.exists():
++                data = json.loads(self._store_path.read_text(encoding="utf-8"))
++                if isinstance(data, list):
++                    return [str(t) for t in data if t]
++        except Exception as e:
++            logger.warning(f"[AutoLike] 已点赞记录读取失败，按空处理：{e}")
++        return []
++
++    def _save_liked(self) -> None:
++        try:
++            if len(self._liked) > self._STORE_LIMIT:
++                self._liked = self._liked[-self._STORE_LIMIT :]
++            self._store_path.write_text(
++                json.dumps(self._liked, ensure_ascii=False),
++                encoding="utf-8",
++            )
++        except Exception as e:
++            logger.warning(f"[AutoLike] 已点赞记录写入失败：{e}")
++
++    async def do_task(self):
++        num = max(int(self.cfg.trigger.like_num or 20), 1)
++        delay_min = max(int(self.cfg.trigger.like_delay_min or 0), 0)
++        delay_max = max(int(self.cfg.trigger.like_delay_max or 0), delay_min)
++
++        # 注意：这里不带 no_commented，避免为每条动态额外请求详情接口
++        posts = await self.service.query_feeds(pos=0, num=num, no_self=True)
++
++        liked = 0
++        skipped = 0
++        for post in posts:
++            if not post.tid:
++                continue
++            if post.tid in self._liked:
++                skipped += 1
++                continue
++            try:
++                await self.service.like_posts(post)
++                self._liked.append(post.tid)
++                liked += 1
++                if delay_max:
++                    await asyncio.sleep(random.randint(delay_min, delay_max))
++            except Exception as e:
++                logger.exception(
++                    f"[AutoLike] 点赞失败 tid={post.tid} uin={post.uin} 昵称={post.name}：{e}"
++                )
++
++        if liked:
++            self._save_liked()
++
++        logger.info(
++            f"[AutoLike] 本轮检查 {len(posts)} 条动态，新点赞 {liked} 条，"
++            f"跳过已赞 {skipped} 条，去重库共 {len(self._liked)} 条"
++        )
+diff --git a/core/service.py b/core/service.py
+index c2f698a..375f339 100644
+--- a/core/service.py
++++ b/core/service.py
+@@ -225,8 +225,16 @@ class PostService:
+         """点赞帖子"""
+         if not post.tid:
+             raise ValueError("帖子 tid 为空")
+-        await self.qzone.like(post)
++        # 本地补丁：上游不看返回值，接口失败也照样打印“已点赞”。
++        # 改成检查响应，失败直接抛错，避免“显示成功实际没点上”。
++        resp = await self.qzone.like(post)
++        if not resp.ok:
++            raise RuntimeError(
++                f"点赞接口返回失败：code={resp.code} message={resp.message} "
++                f"raw={str(resp.raw)[:200]}"
++            )
+         logger.info(f"已点赞 → {post.name}")
++        return resp
+ 
+     async def comment_posts(
+         self, post: Post, event: AiocqhttpMessageEvent | None = None
+diff --git a/deploy/docker-compose.yml b/deploy/docker-compose.yml
+new file mode 100644
+index 0000000..a456d66
+--- /dev/null
++++ b/deploy/docker-compose.yml
+@@ -0,0 +1,35 @@
++# AstrBot 最小部署示例：只用 Docker 跑 AstrBot，插件走纯 Cookie 模式自动点赞
++#
++# 用法：
++#   mkdir -p /opt/qzone-bot/astrbot/data/plugins && cd /opt/qzone-bot
++#   cp <此文件> docker-compose.yml
++#   docker compose up -d
++#   cd astrbot/data/plugins && git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
++#   docker exec astrbot pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
++#       Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0"
++#   docker restart astrbot
++#
++# 说明：
++#   · 本方案不在服务器上运行任何 QQ 客户端（不需要 NapCat），
++#     因此不会把使用者的本机 / 手机 QQ 挤下线。
++#   · 需要放行入站端口 6185（AstrBot 面板），否则只能改配置文件。
++#   · 若还想用 NapCat 模式，请另外加一个 napcat 服务并映射 6099 / 3000。
++
++services:
++  astrbot:
++    image: soulter/astrbot:latest
++    container_name: astrbot
++    restart: always
++    environment:
++      - TZ=Asia/Shanghai
++      # 可选：让容器内的 pip 默认走国内源
++      - PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
++    ports:
++      - "6185:6185"
++    volumes:
++      - ./astrbot/data:/AstrBot/data
++    # 2G 内存的小机器建议加上限制，防止和别的服务互相挤爆
++    # deploy:
++    #   resources:
++    #     limits:
++    #       memory: 800M
+diff --git "a/docs/01-\345\277\253\351\200\237\345\274\200\345\247\213.md" "b/docs/01-\345\277\253\351\200\237\345\274\200\345\247\213.md"
+new file mode 100644
+index 0000000..3802722
+--- /dev/null
++++ "b/docs/01-\345\277\253\351\200\237\345\274\200\345\247\213.md"
+@@ -0,0 +1,189 @@
++# 01 · 快速开始
++
++## 目录
++
++- [前置条件](#前置条件)
++- [两种运行模式怎么选](#两种运行模式怎么选)
++- [方式一：纯 Cookie 模式（推荐）](#方式一纯-cookie-模式推荐)
++- [方式二：NapCat 模式](#方式二napcat-模式)
++- [安装后的自检清单](#安装后的自检清单)
++
++---
++
++## 前置条件
++
++| 项 | 要求 |
++|---|---|
++| AstrBot | 4.x（实测 4.29.0；上游标注 3.4+） |
++| Python | 3.10+ |
++| 依赖 | `Pillow`、`json5`、`apilmoji[tqdm]` |
++| 网络 | 服务器需能访问 `user.qzone.qq.com`、`h5.qzone.qq.com`（国内机器都没问题） |
++
++安装依赖（国内建议走清华源）：
++
++```bash
++pip install Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0" -i https://pypi.tuna.tsinghua.edu.cn/simple
++```
++
++Docker 部署的 AstrBot：
++
++```bash
++docker exec astrbot pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
++    Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0"
++```
++
++---
++
++## 两种运行模式怎么选
++
++| | 纯 Cookie 模式 | NapCat 模式 |
++|---|---|---|
++| 服务器上要不要登录 QQ | **不用** | 要（扫码） |
++| 会不会挤掉你本机 QQ | **不会** | **会**（NapCat 是「电脑端」登录，同号不能同登两台电脑） |
++| 手机 QQ | 不受影响 | 不受影响 |
++| 能用的功能 | 自动点赞（及所有走空间 HTTP 接口的功能） | 全部（含群聊互动、命令、发说说、表白墙） |
++| 凭据 | 手工复制一次 Cookie | NapCat 自动提供 |
++| 凭据寿命 | 几天～几周会过期 | 掉线为止 |
++
++> **只想自动点赞 → 选纯 Cookie 模式。** 这是本 Fork 专门强化的场景。
++
++---
++
++## 方式一：纯 Cookie 模式（推荐）
++
++### 1. 安装插件
++
++```bash
++cd /AstrBot/data/plugins
++git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
++```
++
++装完重启 AstrBot。若日志出现：
++
++```
++Plugin astrbot_plugin_qzone (v3.2.0) ...
++[AutoLike] 已启动，任务周期：0 */2 * * *，偏移范围：±900 秒
++```
++
++说明插件已加载、`AutoLike` 任务已注册。
++
++### 2. 获取 QQ空间 Cookie
++
++**方法 A：浏览器 DevTools（最通用）**
++
++1. 打开 `https://user.qzone.qq.com/<你的QQ号>`，确认已登录
++2. `F12` → **Network / 网络** → `F5` 刷新
++3. 在筛选框输入 `qzone`，点任意一条发往 `user.qzone.qq.com` 的请求
++4. 右键该请求 → **Copy → Copy as cURL (bash)**
++5. 保留下一步要用到的 `cookie` 值
++
++**方法 B：DevTools 的 Application 面板（不用找请求）**
++
++`F12` → **Application / 应用程序** → 左侧 **Storage → Cookies → https://user.qzone.qq.com** → 右侧表格全选复制。
++需要的关键行：`p_skey`、`skey`、`uin`（`uin` 的值形如 `o123456789`）。
++
++**方法 C：QQ 客户端内嵌浏览器（最省事）**
++
++用 QQ 客户端里的浏览器打开你的空间。QQ 客户端那套浏览器的 Cookie 库是**明文存储**的，可以直接读出来 —— 不需要手抄。
++（macOS 上的位置形如 `~/Library/Containers/com.tencent.qq/Data/Library/Application Support/QQ/Partitions/qq-browser-<QQ号>/Cookies`，SQLite 格式。）
++
++> ⚠️ `p_skey` 是 **HttpOnly**，在控制台执行 `document.cookie` **取不到**，必须从请求头或 Application 面板拿。
++> ⚠️ Cookie 里**必须同时有 `p_skey` 和 `uin`**，缺一个插件会直接报「Cookie 中缺少合法 uin」。
++
++### 3. 填写配置
++
++AstrBot 面板 → 插件 → **QQ空间** → 配置：
++
++```jsonc
++{
++  "qzone_cookie": "uin=o123456789; skey=@xxxx; p_skey=xxxx; ...",  // ← 粘贴整串
++  "trigger": {
++    "like_only": true,          // 只点赞，不评论
++    "like_cron": "0 */2 * * *", // 每 2 小时一次；留空 = 关闭
++    "like_offset": 900,         // 时间随机浮动 ±15 分钟
++    "like_num": 20,             // 每轮最多 20 条
++    "like_delay_min": 8,
++    "like_delay_max": 20,
++    "like_use_http_key": true,  // ★ 必须为 true，否则点赞静默失效
++    "comment_cron": "",         // 纯点赞模式下关掉
++    "publish_cron": ""
++  }
++}
++```
++
++### 4. 立即验证（别等 2 小时）
++
++把 `like_cron` 临时改成 `* * * * *`、`like_offset` 改成 `0`，重启 AstrBot，一分钟内就能看到结果：
++
++```bash
++docker logs --since 3m astrbot 2>&1 | grep -E "已点赞|本轮检查"
++```
++
++验证完记得改回 `0 */2 * * *` / `900`。
++
++---
++
++## 方式二：NapCat 模式
++
++1. 确认 NapCat 已登录 QQ，且 AstrBot 里配好 `aiocqhttp` 平台（反向 WS）
++2. **`qzone_cookie` 留空** —— 插件会自动通过 OneBot 的 `get_cookies` 取 `user.qzone.qq.com` 的 Cookie
++3. 其余配置同方式一
++
++NapCat 的反向 WS 配置（NapCat 侧）示例：
++
++```json
++{
++  "enable": true,
++  "name": "astrbot",
++  "url": "ws://astrbot:6199/ws",
++  "token": "<与 AstrBot 里 ws_reverse_token 一致>",
++  "messagePostFormat": "array",
++  "heartInterval": 30000,
++  "reconnectInterval": 30000
++}
++```
++
++AstrBot 侧（`data/cmd_config.json`）：
++
++```json
++"platform": [
++  {
++    "id": "napcat",
++    "type": "aiocqhttp",
++    "enable": true,
++    "ws_reverse_host": "0.0.0.0",
++    "ws_reverse_port": 6199,
++    "ws_reverse_token": "<和上面一致>"
++  }
++]
++```
++
++> ⚠️ 再次提醒：这一步会让服务器以「电脑端」登录你的 QQ，**你本机 QQ 会被挤下线**。
++
++---
++
++## 安装后的自检清单
++
++```bash
++# 1. 插件是否加载
++docker logs astrbot 2>&1 | grep -E "Plugin astrbot_plugin_qzone|AutoLike.*已启动"
++
++# 2. 任务是否在跑（等一轮后看）
++docker logs astrbot 2>&1 | grep "本轮检查"
++
++# 3. 点赞是否真的生效（最权威）
++export QZONE_COOKIE='你的Cookie'
++python3 tools/qzone_check.py --list
++```
++
++判断标准：
++
++| 现象 | 含义 | 处理 |
++|---|---|---|
++| `Plugin ... 已加载` + `[AutoLike] 已启动` | 插件与任务正常 | 继续 |
++| 日志「Cookie 中缺少合法 uin」 | Cookie 复制不全 | 重新复制，确认含 `uin=o...` |
++| 日志「登录状态失效」 | Cookie 过期 | 重新复制一次 |
++| `qzone_check.py --list` 全是 `islike=0` | 点赞没点上 | 确认 `like_use_http_key=true` |
++| 日志出现 `was missed by` 之后没了 | 任务链断掉 | 重启 AstrBot（本 Fork 已修，正常不会出现） |
++
++下一步 → [02 · 配置详解](02-配置详解.md) ｜ 遇到问题 → [04 · 常见问题](04-常见问题.md)
+diff --git "a/docs/02-\351\205\215\347\275\256\350\257\246\350\247\243.md" "b/docs/02-\351\205\215\347\275\256\350\257\246\350\247\243.md"
+new file mode 100644
+index 0000000..c59cfd2
+--- /dev/null
++++ "b/docs/02-\351\205\215\347\275\256\350\257\246\350\247\243.md"
+@@ -0,0 +1,109 @@
++# 02 · 配置详解
++
++所有配置都在 **AstrBot 面板 → 插件 → QQ空间 → 配置** 里，不用改代码。
++标注 🆕 的是本 Fork 新增项。
++
++---
++
++## 根级配置
++
++| 配置项 | 类型 | 默认 | 说明 |
++|---|---|---|---|
++| `manage_group` | string | 空 | 表白墙稿件的审批群号。**留空**则审批信息私发给管理员 |
++| 🆕 `qzone_cookie` | text | 空 | 手工 QQ空间 Cookie（含 `p_skey`、`uin`）。**填了它就优先使用，服务器无需登录 QQ**；留空则回落到 NapCat 的 `get_cookies` |
++| `cookie_ttl` | int | `600` | Cookie 缓存刷新间隔（秒）。到点会重新读取一次 Cookie |
++| `timeout` | int | `10` | HTTP 请求超时（秒）。网络差可调大到 20 |
++| `show_name` | bool | `true` | 卡片里是否显示昵称 |
++
++---
++
++## `llm` — LLM 模块
++
++只在「评论说说 / AI 写说说 / 回复评论」时用到。**纯点赞模式不需要配置任何 LLM。**
++
++| 配置项 | 说明 |
++|---|---|
++| `post_provider_id` | 写说说用的 LLM 提供商（留空 = 跟随默认） |
++| `post_prompt` | 写说说的提示词 |
++| `comment_provider_id` | 评论说说用的 LLM 提供商 |
++| `comment_prompt` | 评论的提示词 |
++| `reply_provider_id` | 回复评论用的 LLM 提供商 |
++| `reply_prompt` | 回复评论的提示词 |
++
++---
++
++## `source` — 数据来源
++
++| 配置项 | 默认 | 说明 |
++|---|---|---|
++| `ignore_groups` | `[]` | 忽略的群聊列表（不采集这些群的聊天记录） |
++| `ignore_users` | `[]` | 忽略的用户列表 |
++| `post_max_msg` | `500` | 用于写说说的聊天记录最大条数 |
++
++---
++
++## `trigger` — 触发配置（重点）
++
++| 配置项 | 类型 | 默认 | 说明 |
++|---|---|---|---|
++| 🆕 `like_only` | bool | `true` | **只点赞不评论**。开启后 `AutoComment` 任务整体跳过，点赞交给 `AutoLike`。想恢复上游行为设为 `false`（会挨个评论好友动态，且评论失败会连带跳过点赞） |
++| 🆕 `like_cron` | string | `0 */2 * * *` | 自动点赞的**基准时间**（Cron：分 时 日 月 周）。**留空 = 关闭自动点赞** |
++| 🆕 `like_offset` | int | `900` | 围绕基准时间随机前后浮动的秒数。`0` = 严格按点触发（不推荐，时间特征明显） |
++| 🆕 `like_num` | int | `20` | 每轮最多处理动态流最新 N 条 |
++| 🆕 `like_delay_min` | int | `8` | 每条点赞之间的最小间隔（秒） |
++| 🆕 `like_delay_max` | int | `20` | 每条点赞之间的最大间隔（秒） |
++| 🆕 `like_use_http_key` | bool | **`true`** | 点赞接口的 `unikey`/`curkey` 用 `http://` 拼接。**实测必须开启**：用 `https://` 时接口照样返回 `succ`，但服务端直接忽略，赞根本点不上。详见 [03 · 根因报告](03-点赞失效根因报告.md) |
++| `publish_cron` | string | `30 23 * * *` | 自动发说说的基准时间，**留空 = 关闭** |
++| `publish_offset` | int | `600` | 自动发说说的时间浮动（秒） |
++| `comment_cron` | string | `0 8 * * *` | 自动评论好友动态的基准时间，**留空 = 关闭**。纯点赞模式下建议留空 |
++| `comment_offset` | int | `600` | 自动评论的时间浮动（秒） |
++| `like_when_comment` | bool | `true` | 评说说时顺便点赞（只在 `like_only=false` 时有意义） |
++| `read_prob` | float | `0.001` | 群聊 / 私聊时随机触发「读说说」的概率。建议保持极小 |
++| `send_admin` | bool | `false` | 触发读说说时只私发给管理员，不发到群里 |
++
++### 定时语义：基准时间 + 随机偏移
++
++```
++*_cron      = 基准时间点（Cron 表达式）
++*_offset    = 围绕基准点随机浮动的秒数（±N）
++实际执行时间 = 基准点 ± N 秒内随机
++```
++
++**例**：`like_cron = 0 */2 * * *` + `like_offset = 900`
++→ 每两小时一次；执行时刻落在基准点前后 15 分钟内的随机一点（如 02:00 的这轮可能在 01:47~02:15 之间触发）。
++
++**为什么这么设计**：避免"每次都在整点发请求"这种明显的机器特征。
++
++### 推荐参数组合
++
++| 场景 | like_cron | like_offset | like_num | 延时 |
++|---|---|---|---|---|
++| **保守**（推荐，够用且风险低） | `0 */2 * * *` | `900` | `20` | 8~20 秒 |
++| 更保守（一天 4 次） | `0 */6 * * *` | `1800` | `20` | 10~30 秒 |
++| 活跃（每半小时） | `*/30 * * * *` | `300` | `10` | 15~40 秒 |
++
++> ⚠️ 不建议把间隔压到几分钟以内。QZone 对高频写操作是有风控的，点赞这种事也不需要那么快。
++
++---
++
++## 关于去重（`liked_tids.json`）
++
++`AutoLike` 任务会把**已成功点赞**的动态 `tid` 记录到插件数据目录：
++
++```
++<AstrBot data>/plugin_data/astrbot_plugin_qzone/liked_tids.json
++```
++
++- 只保留最近 2000 条，超出自动截断
++- 每轮开始会跳过已记录的 `tid`，**不会重复点赞同一条动态**
++- 想让它重新点一遍（比如换了账号、或之前是假成功），**删掉这个文件**即可
++
++---
++
++## 数据文件位置
++
++| 文件 | 作用 |
++|---|---|
++| `<data>/plugin_data/astrbot_plugin_qzone/posts_5.db` | 已抓取的说说（SQLite） |
++| `<data>/plugin_data/astrbot_plugin_qzone/liked_tids.json` | 已点赞去重记录 |
++| `<data>/config/astrbot_plugin_qzone_config.json` | 插件配置（含 Cookie，注意权限） |
+diff --git "a/docs/03-\347\202\271\350\265\236\345\244\261\346\225\210\346\240\271\345\233\240\346\212\245\345\221\212.md" "b/docs/03-\347\202\271\350\265\236\345\244\261\346\225\210\346\240\271\345\233\240\346\212\245\345\221\212.md"
+new file mode 100644
+index 0000000..6ff7716
+--- /dev/null
++++ "b/docs/03-\347\202\271\350\265\236\345\244\261\346\225\210\346\240\271\345\233\240\346\212\245\345\221\212.md"
+@@ -0,0 +1,299 @@
++# QQ空间自动点赞「静默失效」根因报告
++
++> 本文记录了一次完整的真机排查过程：**接口一直返回成功，日志一直打印「已点赞」，但空间里就是没有赞**。
++> 结论是 **3 个独立缺陷叠加**造成的，其中 2 个会让功能「看起来正常、实际什么都没做」。
++>
++> 📌 **隐私说明**：为保护当事人隐私，文中的 QQ 号、好友昵称与动态 ID 均已替换为**等长占位符**
++> （QQ 号 → `10000000xx`，动态 ID → `aaaa1111bbbb2222cccc000x`，昵称 → `好友A/B/C…`）。
++> 除此之外的日志、响应体、参数与结论均为实测原文，未作改动。
++
++---
++
++## 一、现象
++
++在某台服务器上部署 AstrBot 4.29.0 + 本插件（上游 v3.1.3），使用纯 Cookie 模式（`qzone_cookie`），配置为每 2 小时自动点赞一次好友动态。
++
++**日志表现完全正常：**
++
++```
++[AutoLike] 本轮检查 5 条动态，新点赞 5 条，跳过已赞 0 条，去重库共 5 条
++已点赞 → 好友A
++已点赞 → 好友D
++已点赞 → 好友C
++已点赞 → 好友B
++```
++
++**但用户在 QQ空间里刷新后：被"点赞"过的动态，点赞列表里没有自己。**
++
++这正是上游 README 长期挂着的那句话：
++
++> `[x] 点赞说说（接口显示成功，但实测点赞无效）`
++
++---
++
++## 二、关键认知：日志和返回值都不能作为证据
++
++排查中最重要的一个转折点：**必须找到一个"裁判"**。
++
++- ❌ **不能信日志** —— 上游的 `like_posts()` 调完接口不检查返回值，直接打印「已点赞」。
++- ❌ **不能信接口返回** —— 点赞接口对「首次点赞」「重复点赞」「参数被忽略」三种情况**返回完全一样**：
++
++```json
++{
++    "code": 0,
++    "subcode": 0,
++    "message": "succ",
++    "default": 0,
++    "data": ""
++}
++```
++
++- ❌ **详情接口没有点赞字段** —— `emotion_cgi_msgdetail_v6` 的响应里搜不到任何 `like` 相关字段，无法用来核对。
++
++### ✅ 真正的裁判：好友动态流 HTML 里的点赞按钮
++
++`feeds3_html_more` 接口返回的 HTML 中，每条动态的点赞按钮都带着**真实状态**：
++
++```html
++<a class="item qz_like_btn_v3 item-on"
++   data-islike="1"          <!-- 1 = 我点过赞，0 = 没点过 -->
++   data-likecnt="13"        <!-- 真实点赞总数 -->
++   data-showcount="12"
++   data-unikey="http://user.qzone.qq.com/1000000002/mood/aaaa1111bbbb2222cccc0002"
++   data-curkey="http://user.qzone.qq.com/1000000002/mood/aaaa1111bbbb2222cccc0002">
++```
++
++于是可以**闭环自动验证**：点赞前记录 `data-islike` → 调点赞接口 → 重新拉动态流 → 看 `data-islike` 有没有从 `0` 变成 `1`。
++（本仓库的 `tools/qzone_check.py` 就是这个思路的成品工具。）
++
++用这套方法测出的结果：
++
++| 动态 | 调用点赞接口前 | 调用后 | 判定 |
++|---|---|---|---|
++| `user.qzone.qq.com/1000000001/mood/9bbc00dc...` | `islike=0 likecnt=0` | `islike=0 likecnt=0` | ❌ **赞没点上** |
++| `user.qzone.qq.com/1000000003/mood/0d78b599...` | `islike=0 likecnt=3` | `islike=0 likecnt=3` | ❌ **赞没点上** |
++
++**结论：接口返回 `succ` 是假象。**
++
++---
++
++## 三、根因（3 个独立缺陷）
++
++### 根因 1：`unikey` / `curkey` 必须用 `http://`，插件用了 `https://` ★ 核心
++
++点赞接口 `internal_dolike_app` 的 `unikey`/`curkey` 参数，**决定了"给哪条动态点赞"**。
++
++**浏览器实际发送的**（从动态流 HTML 的 `data-unikey` 属性直接读出来）：
++
++```
++http://user.qzone.qq.com/1000000001/mood/aaaa1111bbbb2222cccc0001
++^^^^^^ http
++```
++
++**插件发送的**（`core/qzone/api.py` 的 `like()`）：
++
++```python
++"unikey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",   # BASE_URL = "https://user.qzone.qq.com"
++"curkey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",
++```
++
++`BASE_URL` 是 `https://user.qzone.qq.com`，于是 `unikey` 变成了 `https://...`。
++
++**服务端的行为**：既不报错也不点赞，直接返回 `{"code":0,"message":"succ"}` 把你糊弄过去。
++
++**验证**：把同一段请求里的 `unikey`/`curkey` 换成 `http://` 前缀，其它参数一字不改，再调一次：
++
++```
++发送点赞（http:// unikey）: {"code":0,"subcode":0,"message":"succ","default":0,"data":""}
++
++=== 点赞后状态 ===
++   islike=1 likecnt=1    http://user.qzone.qq.com/1000000001/mood/aaaa1111bbbb2222cccc0001  <== 目标
++```
++
++`islike` 从 `0` 变成 `1`，`likecnt` 从 `0` 变成 `1` —— **成功**。
++
++> ℹ️ 社区 PR [Zhalslar/astrbot_plugin_qzone#47](https://github.com/Zhalslar/astrbot_plugin_qzone/pull/47) 早已指出这一点，但被作者关闭，理由是「这个接口实际上是有效的，只是文档忘改了」。
++> 实测证明：**PR 的判断是对的**，`https://` 版本确实点不上。本 Fork 采纳了该修复，并做成 `like_use_http_key` 开关（**默认开启**）。
++
++---
++
++### 根因 2：`data` 是字符串导致点赞流程崩溃
++
++`core/qzone/client.py` 的 `request()` 里有这么一行（上游原样）：
++
++```python
++if (
++    resp.status == HTTP_STATUS_UNAUTHORIZED
++    or parsed.get("code") == QZONE_CODE_LOGIN_EXPIRED
++    or parsed.get("data", {}).get("ret") == QZONE_CODE_IMAGE_EXPIRED   # ← 这里
++):
++```
++
++它假设 `parsed["data"]` 一定是 dict。但**点赞接口返回的 `data` 是字符串** `""`：
++
++```json
++{ "code":0, "subcode":0, "message":"succ", "default":0, "data": "" }
++```
++
++于是在点赞时必然抛异常：
++
++```
++[AutoLike] 点赞失败 tid=aaaa1111bbbb2222cccc0004 uin=1000000004 昵称=好友C：
++'str' object has no attribute 'get'
++
++  File ".../core/qzone/client.py", line 67, in request
++    or parsed.get("data", {}).get("ret") == QZONE_CODE_IMAGE_EXPIRED
++```
++
++**后果**：`like()` 里的异常会向上一路抛出，被 `AutoLike` 的 `except` 吞掉 → 记一条 `点赞失败`，然后**继续处理下一条**。
++配合上游「失败也打印已点赞」的写法，日志会变得极其混乱。
++
++**实测对比**：修复前一轮 5 条全失败；修复后一轮 5 条全成功。
++
++**修复**：
++
++```python
++data_field = parsed.get("data")
++...
++or (isinstance(data_field, dict) and data_field.get("ret") == QZONE_CODE_IMAGE_EXPIRED)
++```
++
++---
++
++### 根因 3：定时任务「错过 1 秒」就永久断链
++
++上游 `core/scheduler.py` 的调度模型是**一次性任务链**：
++
++```
++注册任务 → 到点执行 do_task() → finally 里再排下一轮 → 到点执行 → ...
++```
++
++每轮用 `DateTrigger` 排一个只触发一次的任务：
++
++```python
++self.scheduler.add_job(
++    func=self._run_task_wrapper,
++    trigger=DateTrigger(run_date=target_time, timezone=self.timezone),
++    name=f"{self.job_name}_once_{int(base_time.timestamp())}",
++    max_instances=1,
++    # ← 没有 misfire_grace_time
++)
++```
++
++APScheduler 的默认宽限期只有 **1 秒**。一旦任务晚了（容器刚启动、事件循环卡顿、系统负载高），它会**直接跳过这次执行**：
++
++```
++Run time of job "AutoLike_once_1792171980 (trigger: date[2026-10-17 01:33:00 CST],
++                 next run at: 2026-10-17 01:33:00 CST)" was missed by 0:00:01.048084
++```
++
++问题在于：**「排下一轮」这件事写在 `_run_task_wrapper()` 的 `finally` 里**。
++任务被跳过 → wrapper 根本没被调用 → **下一轮永远不会被排上**。
++
++结果：日志停在那一行 warning，之后**再也没有任何点赞动作，也没有任何报错** —— 安静的永久失效。这在 2 小时一次的低频任务上极其致命（你根本不会发现）。
++
++**修复**：加宽限期，错过也补跑。
++
++```python
++misfire_grace_time=3600,   # 1 小时
++coalesce=True,
++```
++
++**顺带发现的次生问题**：`_schedule_next_job()` 里，当随机偏移把执行时间算到过去时，会「立即补偿执行」（`now + 1s`）。此时 `_last_base_time` 仍是未来的基准时间，导致下一轮算出**同一个基准时间**、又可能再次补偿 —— 形成短时间内的连续执行。实测在 20 秒内连跑了 4 轮（每轮都会请求一次动态流）。
++
++在 `0 */2 * * *` + `±900s` 的配置下，只有当执行时刻落进「基准点前 15 分钟」这个窗口才会触发，属于**偶发的 API 连击**，值得注意但不算致命。若要彻底解决，应改为「同一基准时间只允许执行一次」。
++
++---
++
++## 四、修复后的完整验证
++
++配置：`like_use_http_key=true`、`like_only=true`、`like_cron=* * * * *`（临时高频以加速验证）。
++
++**插件日志：**
++
++```
++02:06:03 已点赞 → 好友E
++02:06:18 已点赞 → 好友A        ← 间隔 8~20 秒随机（防风控）
++02:06:30 已点赞 → 好友D
++02:06:50 已点赞 → 好友C
++02:07:09 已点赞 → 好友B
++02:07:19 [AutoLike] 本轮检查 5 条动态，新点赞 5 条，跳过已赞 0 条，去重库共 5 条
++02:07:24 [AutoLike] 本轮检查 5 条动态，新点赞 0 条，跳过已赞 5 条，去重库共 5 条   ← 去重生效
++```
++
++**独立裁判（动态流 `data-islike`）复核：**
++
++```
++✅ 已赞  likecnt=1    http://user.qzone.qq.com/1000000001/mood/aaaa1111bbbb2222cccc0001   ← 之前是 0
++✅ 已赞  likecnt=13   http://user.qzone.qq.com/1000000002/mood/aaaa1111bbbb2222cccc0002
++✅ 已赞  likecnt=4    http://user.qzone.qq.com/1000000003/mood/aaaa1111bbbb2222cccc0003   ← 之前是 3
++✅ 已赞  likecnt=1    http://user.qzone.qq.com/1000000004/mood/aaaa1111bbbb2222cccc0004
++✅ 已赞  likecnt=20   http://user.qzone.qq.com/1000000002/mood/aaaa1111bbbb2222cccc0005
++```
++
++**5/5 全部真实生效。**
++
++---
++
++## 五、复现与自查方法
++
++如果你的点赞也「看起来成功但没效果」，按下面顺序自查：
++
++### 1. 用工具看真实状态
++
++```bash
++export QZONE_COOKIE='uin=oXXX; skey=XXX; p_skey=XXX; ...'
++python3 tools/qzone_check.py --list
++```
++
++- 全是 `islike=0` → 赞根本没点上 → 检查 `like_use_http_key` 是否为 `true`
++- 有 `islike=1` → 点赞正常，可能是浏览器缓存，强刷页面再看
++
++### 2. 看日志里有没有崩溃
++
++```bash
++docker logs astrbot 2>&1 | grep -E "点赞失败|has no attribute|was missed by"
++```
++
++出现 `'str' object has no attribute 'get'` → 根因 2
++出现 `was missed by` 且之后没有新日志 → 根因 3（任务链已断，重启 AstrBot 可临时恢复）
++
++### 3. 手工发一次请求对照
++
++把动态流 HTML 里那条动态的 `data-unikey` 原样复制出来，作为 `unikey`/`curkey` 发给：
++
++```
++POST https://user.qzone.qq.com/proxy/domain/w.qzone.qq.com/cgi-bin/likes/internal_dolike_app?g_tk=<g_tk>
++```
++
++其它参数：`qzreferrer` / `opuin` / `appid=311` / `from=1` / `typeid=0` / `abstime` / `fid` / `active=0` / `format=json` / `fupdate=1`。
++
++> `g_tk` 由 `p_skey` 算出：`h=5381; for ch in p_skey: h += (h<<5) + ord(ch); g_tk = h & 0x7FFFFFFF`
++
++---
++
++## 六、给上游的建议
++
++1. **`unikey`/`curkey` 改用 `http://` 拼接**（或直接复用动态流里的 `data-unikey`，最稳妥）。
++2. `client.py` 中对 `data` 的取值加 `isinstance(data, dict)` 判断。
++3. `add_job` 时设置 `misfire_grace_time`，且「排下一轮」不应只依赖 `finally`（任务被跳过就没人补排）。
++4. `like_posts()` 应检查响应，失败时抛出而非静默记为成功。
++5. README 中「点赞无效」的说明与 MIT 徽章都应更正（仓库 `LICENSE` 实为 GPL-3.0）。
++
++---
++
++## 附：排查时间线（简）
++
++| 阶段 | 动作 | 结果 |
++|---|---|---|
++| 1 | Cookie 直连动态流接口 | ✅ `code:0`，拿到 90KB 数据 → Cookie 有效 |
++| 2 | 直接调点赞接口 | 返回 `succ` → 一度误判为「成功」 |
++| 3 | 用「详情接口含不含自己 uin」验证 | ⚠️ **假阳性**：那个 uin 出现在 `logininfo`（登录者自己），不是点赞列表 |
++| 4 | 反复点赞同一条，比较响应差异 | 无差异 → 接口返回值不可作为证据 |
++| 5 | 深挖动态流 HTML 的点赞按钮属性 | 🎯 发现 `data-islike` / `data-likecnt` → **找到裁判** |
++| 6 | 对照浏览器 `data-unikey` 与插件拼的 unikey | 🎯 发现 `http://` vs `https://` → **根因 1** |
++| 7 | 翻日志发现 `'str' object has no attribute 'get'` | 🎯 **根因 2** |
++| 8 | 发现任务 `was missed by` 后再无日志 | 🎯 **根因 3** |
++| 9 | 修复后闭环复测 | ✅ 5/5 全部 `islike=1` |
++
++> 教训：**当一个"写操作"的返回值在所有情况下都相同，它就不能作为成功依据。必须找到能反映真实状态的读接口来交叉验证。**
+diff --git "a/docs/04-\345\270\270\350\247\201\351\227\256\351\242\230.md" "b/docs/04-\345\270\270\350\247\201\351\227\256\351\242\230.md"
+new file mode 100644
+index 0000000..1e179d4
+--- /dev/null
++++ "b/docs/04-\345\270\270\350\247\201\351\227\256\351\242\230.md"
+@@ -0,0 +1,160 @@
++# 04 · 常见问题（FAQ）
++
++## 一、点赞相关
++
++### Q1. 日志明明写着「已点赞」，为什么空间里没有我的赞？
++
++**先跑这个工具看真实状态**（这是唯一可信的判据）：
++
++```bash
++export QZONE_COOKIE='你的Cookie'
++python3 tools/qzone_check.py --list
++```
++
++- 输出全是 `❌ 未赞 islike=0` → **赞没点上**。检查配置 `trigger.like_use_http_key` 是否为 `true`
++  （`https://` 拼 `unikey` 时接口会返回 `succ` 但服务端忽略，这是最隐蔽的坑）
++- 输出是 `✅ 已赞 islike=1` → 点赞正常，浏览器强刷（`Cmd/Ctrl+Shift+R`）或换客户端再看
++
++详见 [03 · 点赞失效根因报告](03-点赞失效根因报告.md)。
++
++### Q2. 为什么我自己发的说说从来没被点赞？
++
++**这是设计如此。** 本插件点赞的是**好友动态流**里的动态，并且会主动排除自己的帖子（`no_self=True`）。
++
++给自己的说说点赞没有意义，所以不做。想验证功能是否正常，请用 `tools/qzone_check.py --like-latest`，或者看好友的最新动态。
++
++### Q3. 会不会重复点赞同一条动态？
++
++不会。已成功点赞的 `tid` 会记在 `liked_tids.json` 里，每轮跳过。
++
++> 注意：**只有成功点赞才会记录**（本 Fork 修复了「失败也记成功」的问题）。如果你要重新点一遍，删掉这个文件。
++
++### Q4. 点赞太频繁会不会被封号？
++
++会有风险，所以请保守设置。默认参数（每 2 小时、每次最多 20 条、每条间隔 8~20 秒随机）已经比较克制。**不要**把间隔压到几分钟。
++
++另外：
++- `like_offset` 别设成 0（整点触发特征太明显）
++- 不要拿它去刷陌生人
++
++### Q5. 能不能只点赞某几个人？
++
++上游代码里没有按人过滤点赞的配置。可以改 `core/scheduler.py` 的 `AutoLike.do_task()`，在循环里按 `post.uin` 过滤。欢迎提 PR。
++
++---
++
++## 二、Cookie 相关
++
++### Q6. Cookie 多久会过期？
++
++不一定，通常**几天到几周**。`p_skey` / `skey` 在浏览器里是会话级 Cookie，浏览器关掉后服务端会话一般还能撑一段时间。
++
++**过期表现**：日志出现
++
++```
++登录状态失效，请重新登录后重试
++```
++
++**处理**：重新复制一次 Cookie，填回 `qzone_cookie`，重启 AstrBot。
++
++### Q7. 为什么 `document.cookie` 复制出来的不含 `p_skey`？
++
++因为 `p_skey` 是 **HttpOnly**，JS 读不到。必须：
++- 从 DevTools → Network → 请求头里的 `cookie:` 拿，或
++- 从 DevTools → Application → Cookies 面板拿
++
++### Q8. 用了 Cookie 模式，服务器还需要装 NapCat 吗？
++
++**不需要。** 纯 Cookie 模式下插件完全通过 HTTP 调 QQ空间接口，服务器上不需要任何 QQ 客户端。
++
++好处：不会把你本机 / 手机的 QQ 挤下线。（NapCat 是「电脑端」登录，同一个号不能同时登两台电脑。）
++
++### Q9. 服务器上能不能同时用 Cookie 和 NapCat？
++
++可以，但没必要 —— `qzone_cookie` 填了就用它，NapCat 只在 Cookie 为空时兜底。
++
++---
++
++## 三、Cookie 模式 vs NapCat 模式
++
++| 问题 | 纯 Cookie | NapCat |
++|---|---|---|
++| 服务器要登 QQ 吗 | 不用 | 要 |
++| 挤掉本机 QQ | 不会 | **会** |
++| 挤掉手机 QQ | 不会 | 不会 |
++| 凭据过期 | 需重新复制 Cookie | 掉线需重新扫码 |
++| 能收命令 / 群聊互动 | ❌ 没有 QQ 连接，收不到消息 | ✅ |
++| 能发说说 / 表白墙 | 代码支持，但没有触发入口 | ✅ |
++
++---
++
++## 四、任务与日志
++
++### Q10. 日志出现 `Run time of job ... was missed by 0:00:01` 之后就没动静了？
++
++这是**上游的一个严重 bug**，会导致任务链永久断掉、点赞静默失效。
++本 Fork 已修（`misfire_grace_time=3600`）。如果你用的是上游版本，重启 AstrBot 可临时恢复，但还会再犯。
++
++### Q11. 怎么看插件日志？
++
++```bash
++docker logs -f astrbot | grep -E "AutoLike|已点赞|点赞失败"
++```
++
++非 Docker 部署就看 AstrBot 控制台输出。
++
++### Q12. 怎么临时加快频率来验证？
++
++把 `like_cron` 设成 `* * * * *`、`like_offset` 设成 `0`，重启 AstrBot，等一分钟。验证完记得改回去。
++
++---
++
++## 五、安装与依赖
++
++### Q13. 报 `ModuleNotFoundError: No module named 'json5'`（或 `PIL`、`apilmoji`）
++
++依赖没装。：
++
++```bash
++docker exec astrbot pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
++    Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0"
++docker restart astrbot
++```
++
++### Q14. `pip install apilmoji[tqdm]` 提示 `does not provide the extra 'tqdm'`
++
++只是警告，包本身已经装上了，可以忽略。
++
++### Q15. 服务器拉不动 GitHub 怎么办？
++
++- 用国内镜像克隆（如 `gh-proxy`、Gitee 镜像）
++- 或者本地 `git clone` 后打包上传：`tar czf p.tgz --exclude=.git astrbot_plugin_qzone` → `scp` → 服务器解压到插件目录
++
++---
++
++## 六、合规与安全
++
++### Q16. 这算违规吗？
++
++本插件是**非官方第三方工具**，通过你本人的登录态访问你自己的 QQ空间，属于"自动化你自己的账号操作"。
++但任何自动化访问都可能触发平台风控，**请自担风险**，并保持低频、只对好友使用。
++
++### Q17. Cookie 泄露会怎样？
++
++Cookie 等同于你 QQ空间的登录凭证，拿到它的人可以以你的身份操作空间（看私密内容、发说说、删说说等）。因此：
++
++- **绝对不要**提交到 Git（`.gitignore` 已排除相关文件）
++- **绝对不要**发到群里 / 贴到公开 Issue 里（提 Issue 记得打码）
++- 服务器上的配置文件权限收紧：`chmod 600 data/config/astrbot_plugin_qzone_config.json`
++- 怀疑泄露：去 QQ空间网页版退出登录，Cookie 立即失效
++
++---
++
++## 还是没解决？
++
++提 Issue 时请附上（**记得打码 Cookie**）：
++
++1. AstrBot 版本、本插件版本
++2. `docker logs astrbot 2>&1 | grep -E "AutoLike|已点赞|点赞失败" | tail -50`
++3. `python3 tools/qzone_check.py --list` 的输出
++4. 你的 `trigger` 配置（不含 Cookie）
+diff --git "a/docs/05-\350\241\245\344\270\201\346\270\205\345\215\225.md" "b/docs/05-\350\241\245\344\270\201\346\270\205\345\215\225.md"
+new file mode 100644
+index 0000000..3d80921
+--- /dev/null
++++ "b/docs/05-\350\241\245\344\270\201\346\270\205\345\215\225.md"
+@@ -0,0 +1,209 @@
++# 05 · 补丁清单
++
++本 Fork 相对上游 [Zhalslar/astrbot_plugin_qzone](https://github.com/Zhalslar/astrbot_plugin_qzone) **v3.1.3（commit `10bf854`）** 的全部改动：
++
++**9 个文件、+268 / −22 行**。完整 diff 见 [`patches/fork-vs-upstream.patch`](../patches/fork-vs-upstream.patch)。
++
++| # | 提交 | 类型 | 一句话 |
++|---|---|---|---|
++| 1 | `68eb565` | feat | 只点赞不评论模式 + `AutoLike` 任务（去重 / 随机间隔）+ http unikey 开关 |
++| 2 | `185da86` | fix | 日志把「秒」写成了「分钟」 |
++| 3 | `51fc98e` | feat | 支持手工 Cookie，服务器无需登录 QQ 客户端 |
++| 4 | `e5131e2` | feat | 手工 Cookie 其余字段原样透传，提高接口成功率 |
++| 5 | `51931bf` | fix | 点赞接口失败不再谎报成功 |
++| 6 | `d2344a0` | fix | **任务错过调度被永久跳过 → 任务链断掉、点赞静默失效** |
++| 7 | `e77f4e7` | fix | **点赞接口 `data` 是字符串导致崩溃 → 点赞流程整体失效** |
++| 8 | — | feat | 默认开启 `like_use_http_key`（实测必须） |
++
++---
++
++## 1. `core/scheduler.py` — 新增 `AutoLike` 任务 + `like_only`
++
++**为什么**：上游的自动点赞**挂在自动评论任务里**：
++
++```python
++posts = await self.service.query_feeds(pos=0, num=20, no_self=True, no_commented=True)
++for post in posts:
++    await self.service.comment_posts(post)      # ← 先用 LLM 生成评论并发表
++    if self.cfg.trigger.like_when_comment:
++        await self.service.like_posts(post)     # ← 评论成功后才点赞
++```
++
++两个问题：
++1. 只想点赞，就会连带**给好友动态挨个评论**（社交风险）；
++2. 评论依赖 LLM，**评论一抛异常，后面的点赞就被 `except` 跳过** —— LLM 没配好 = 点赞完全不工作。
++
++**改动**：新增独立的 `AutoLike` 定时任务。
++
++```python
++class AutoLike(AutoRandomCronTask):
++    def __init__(self, config, service, sender):
++        super().__init__("AutoLike", config.trigger.like_cron, config.timezone,
++                         config.trigger.like_offset)
++        self._store_path = Path(config.data_dir) / "liked_tids.json"
++        self._liked: list[str] = self._load_liked()
++
++    async def do_task(self):
++        posts = await self.service.query_feeds(pos=0, num=num, no_self=True)
++        for post in posts:
++            if post.tid in self._liked:          # ← 本地去重
++                continue
++            await self.service.like_posts(post)
++            self._liked.append(post.tid)
++            await asyncio.sleep(random.randint(delay_min, delay_max))   # ← 防风控
++        self._save_liked()
++```
++
++特点：
++- **只点赞、不评论、不调 LLM**
++- 已点赞的 `tid` 落盘去重（保留最近 2000 条）
++- 每条之间随机等待 8~20 秒
++- 不传 `no_commented`，避免为每条动态额外请求详情接口
++
++同时给 `AutoComment.do_task()` 加了开头短路：
++
++```python
++if getattr(self.cfg.trigger, "like_only", False):
++    logger.info("[AutoComment] like_only 已开启，跳过本轮自动评论")
++    return
++```
++
++---
++
++## 2. `core/qzone/client.py` — 修复点赞崩溃（**严重**）
++
++```diff
+++        # 本地补丁：上游这里假定 data 一定是 dict，但点赞等接口返回的 data 是字符串，
+++        # 会直接抛 'str' object has no attribute 'get'，导致点赞流程整体崩掉。
+++        data_field = parsed.get("data")
+++
++         if (
++             resp.status == HTTP_STATUS_UNAUTHORIZED
++             or parsed.get("code") == QZONE_CODE_LOGIN_EXPIRED
++-            or parsed.get("data", {}).get("ret") == QZONE_CODE_IMAGE_EXPIRED
+++            or (
+++                isinstance(data_field, dict)
+++                and data_field.get("ret") == QZONE_CODE_IMAGE_EXPIRED
+++            )
++         ):
++```
++
++点赞接口返回 `"data": ""`（字符串），上游代码 `.get("ret")` 必然抛异常。修复前实测一轮 5 条全部失败。
++
++---
++
++## 3. `core/qzone/api.py` — `http://` unikey 开关（**核心修复**）
++
++```diff
++     BASE_URL = "https://user.qzone.qq.com"
+++    # 本地补丁：点赞接口的 unikey/curkey 必须是 http:// 协议
+++    BASE_URL_HTTP = "http://user.qzone.qq.com"
++```
++
++```diff
++         ctx = await self.session.get_ctx()
+++        key_base = (
+++            self.BASE_URL_HTTP
+++            if getattr(self.cfg.trigger, "like_use_http_key", False)
+++            else self.BASE_URL
+++        )
++...
++-                "unikey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",
++-                "curkey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",
+++                "unikey": f"{key_base}/{post.uin}/mood/{post.tid}",
+++                "curkey": f"{key_base}/{post.uin}/mood/{post.tid}",
++```
++
++依据：动态流 HTML 里点赞按钮携带的 `data-unikey` 就是 `http://` 开头（浏览器实际发送的值）。
++详见 [03 · 点赞失效根因报告](03-点赞失效根因报告.md)。
++
++---
++
++## 4. `core/scheduler.py` — 修复任务链断掉（**严重**）
++
++```diff
++             self.scheduler.add_job(
++                 func=self._run_task_wrapper,
++                 trigger=DateTrigger(run_date=target_time, timezone=self.timezone),
++                 name=f"{self.job_name}_once_{int(base_time.timestamp())}",
++                 max_instances=1,
+++                # 上游没设宽限期，任务只要晚 1 秒执行就会被 APScheduler 直接跳过，
+++                # 而“下一轮”是在本轮执行完才排的 —— 于是整条任务链永久断掉、静默失效。
+++                misfire_grace_time=3600,
+++                coalesce=True,
++             )
++```
++
++---
++
++## 5. `core/service.py` — 点赞不再谎报成功
++
++```diff
++     async def like_posts(self, post: Post):
++         if not post.tid:
++             raise ValueError("帖子 tid 为空")
++-        await self.qzone.like(post)
+++        resp = await self.qzone.like(post)
+++        if not resp.ok:
+++            raise RuntimeError(
+++                f"点赞接口返回失败：code={resp.code} message={resp.message} "
+++                f"raw={str(resp.raw)[:200]}"
+++            )
++         logger.info(f"已点赞 → {post.name}")
+++        return resp
++```
++
++---
++
++## 6. `core/qzone/session.py` + `model.py` + `config.py` — 手工 Cookie 模式
++
++`session.py`：Cookie 优先取配置，取不到才回落到 NapCat（`get_cookies`），并兼容直接粘贴整行 `Cookie: xxx`：
++
++```python
++cookies_str = str(getattr(self.cfg, "qzone_cookie", "") or "").strip()
++if cookies_str:
++    logger.debug("使用配置中的手工 QQ空间 Cookie")
++else:
++    if not self.cfg.client:
++        raise RuntimeError("既没有配置 qzone_cookie，也没有可用的 CQHttp 实例（NapCat）")
++    payload = await self.cfg.client.get_cookies(domain=self.DOMAIN)
++    ...
++```
++
++`model.py`：把浏览器 Cookie 里除 `uin`/`skey`/`p_skey` 之外的字段也原样带上，提高接口成功率。
++
++---
++
++## 7. `core/scheduler.py` — 修正日志单位
++
++```diff
++-            f"[{self.job_name}] 已启动，任务周期：{self.cron_expr}，偏移范围：±{self.offset_seconds} 分钟"
+++            f"[{self.job_name}] 已启动，任务周期：{self.cron_expr}，偏移范围：±{self.offset_seconds} 秒"
++```
++
++---
++
++## 8. `main.py` / `_conf_schema.json` — 接线与面板配置项
++
++- `main.py`：导入并注册 `AutoLike`，在 `terminate()` 里正确停止
++- `_conf_schema.json`：新增 7 个配置项，全部可在面板里可视化调整
++
++---
++
++## 如何回滚到上游行为
++
++1. `like_only` 设为 `false`
++2. `qzone_cookie` 清空（走 NapCat）
++3. `like_cron` 留空（关掉 `AutoLike` 任务）
++4. `like_use_http_key` 设为 `false`（**不建议**，会重新变成假成功）
++
++## 如何把补丁应用到更新的上游版本
++
++```bash
++git remote add upstream https://github.com/Zhalslar/astrbot_plugin_qzone
++git fetch upstream
++git checkout -b my-fork upstream/main
++git apply patches/fork-vs-upstream.patch    # 可能有冲突，按提示手工合并
++```
++
++> `core/qzone/client.py`、`core/scheduler.py`、`core/service.py` 三处是最容易被上游重构碰到的地方，冲突时优先保留本 Fork 的修复语义。
+diff --git "a/docs/06-\351\203\250\347\275\262\345\210\260\346\234\215\345\212\241\345\231\250.md" "b/docs/06-\351\203\250\347\275\262\345\210\260\346\234\215\345\212\241\345\231\250.md"
+new file mode 100644
+index 0000000..846ccef
+--- /dev/null
++++ "b/docs/06-\351\203\250\347\275\262\345\210\260\346\234\215\345\212\241\345\231\250.md"
+@@ -0,0 +1,230 @@
++# 06 · 部署到服务器
++
++这里给出一个**最小可用**的部署方案：只用 Docker 跑 AstrBot（不跑 NapCat），插件走纯 Cookie 模式自动点赞。
++
++---
++
++## 架构
++
++```
++你的浏览器（复制一次 QQ空间 Cookie）
++        │
++        ▼
++服务器 /opt/qzone-bot/
++├── docker-compose.yml
++└── astrbot/data/
++    ├── config/astrbot_plugin_qzone_config.json   ← Cookie 填这里
++    └── plugins/astrbot_plugin_qzone/             ← 本插件
++        │
++        ▼
++   AstrBot 容器（面板 6185）
++        └── AutoLike 任务：每 2 小时拉一次好友动态流并点赞
++```
++
++**服务器上没有任何 QQ 客户端**，因此不会影响你本机 / 手机上的 QQ。
++
++---
++
++## 资源需求
++
++| 项 | 最低 | 推荐 |
++|---|---|---|
++| 内存 | 512 MB | 1 GB |
++| 磁盘 | 3 GB（AstrBot 镜像 1.9 GB） | 5 GB |
++| CPU | 1 核 | 2 核 |
++
++---
++
++## 一、部署
++
++### 1. 目录与编排文件
++
++```bash
++mkdir -p /opt/qzone-bot/astrbot/data/plugins
++cd /opt/qzone-bot
++```
++
++`docker-compose.yml`：
++
++```yaml
++services:
++  astrbot:
++    image: soulter/astrbot:latest
++    container_name: astrbot
++    restart: always
++    environment:
++      - TZ=Asia/Shanghai
++    ports:
++      - "6185:6185"      # 面板
++    volumes:
++      - ./astrbot/data:/AstrBot/data
++```
++
++启动：
++
++```bash
++docker compose up -d
++docker compose ps
++```
++
++### 2. 安装插件与依赖
++
++```bash
++cd /opt/qzone-bot/astrbot/data/plugins
++git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
++
++docker exec astrbot pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
++    Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0"
++
++docker restart astrbot
++```
++
++> 服务器拉不动 GitHub 时：本地打包 `tar czf p.tgz --exclude=.git astrbot_plugin_qzone` 再 `scp` 上传解压。
++
++### 3. 确认插件加载
++
++```bash
++docker logs astrbot 2>&1 | grep -E "Plugin astrbot_plugin_qzone|AutoLike"
++```
++
++期望输出：
++
++```
++[Core] Loading plugin astrbot_plugin_qzone ...
++Plugin astrbot_plugin_qzone (v3.2.0) ...
++[AutoLike] 已启动，任务周期：0 */2 * * *，偏移范围：±900 秒
++```
++
++---
++
++## 二、配置
++
++### 方式 A：面板（推荐）
++
++浏览器打开 `http://<服务器IP>:6185`，默认账号密码都是 `astrbot`（**首登强制改密码**）。
++→ 插件 → QQ空间 → 配置 → 填 `qzone_cookie` 与 `trigger.like_*`。
++
++### 方式 B：直接改配置文件
++
++```bash
++nano /opt/qzone-bot/astrbot/data/config/astrbot_plugin_qzone_config.json
++chmod 600 /opt/qzone-bot/astrbot/data/config/astrbot_plugin_qzone_config.json   # 里面有 Cookie
++```
++
++关键字段：
++
++```jsonc
++{
++  "qzone_cookie": "uin=o123456789; skey=@xxxx; p_skey=xxxx; ...",
++  "trigger": {
++    "like_only": true,
++    "like_cron": "0 */2 * * *",
++    "like_offset": 900,
++    "like_num": 20,
++    "like_delay_min": 8,
++    "like_delay_max": 20,
++    "like_use_http_key": true,
++    "comment_cron": "",
++    "publish_cron": ""
++  }
++}
++```
++
++改完 `docker restart astrbot`。
++
++> 如果面板里保存过配置，文件可能是带 BOM 的，用 `encoding="utf-8-sig"` 读写比较稳。
++
++---
++
++## 三、验证
++
++```bash
++# 临时加速：like_cron 改成 "* * * * *"、like_offset 改成 0，重启后等 1 分钟
++docker logs --since 3m astrbot 2>&1 | grep -E "已点赞|本轮检查"
++```
++
++```
++已点赞 → 某某
++本轮检查 5 条动态，新点赞 5 条，跳过已赞 0 条，去重库共 5 条
++```
++
++再用工具做**独立复核**（不要只信日志）：
++
++```bash
++docker exec astrbot python3 /AstrBot/data/plugins/astrbot_plugin_qzone/tools/qzone_check.py --list \
++  --cookie "$(python3 -c "import json;print(json.load(open('/opt/qzone-bot/astrbot/data/config/astrbot_plugin_qzone_config.json',encoding='utf-8-sig'))['qzone_cookie'])")"
++```
++
++看到 `✅ 已赞 islike=1` 才算真的成功。
++
++---
++
++## 四、云服务器安全组 / 防火墙
++
++需要在云厂商控制台放行入站端口：
++
++| 端口 | 用途 | 是否必须 |
++|---|---|---|
++| `6185` | AstrBot 面板 | 建议放行（否则只能改文件配置） |
++| `22` | SSH | 必须 |
++
++若用 NapCat：还需要 `6099`（WebUI）。
++
++服务器本机防火墙（firewalld/ufw）也要确认没挡：
++
++```bash
++systemctl is-active firewalld        # CentOS
++firewall-cmd --list-ports
++ufw status                           # Ubuntu
++```
++
++---
++
++## 五、运维命令
++
++```bash
++cd /opt/qzone-bot
++
++docker compose ps                                    # 状态
++docker logs -f astrbot                               # 实时日志
++docker logs astrbot 2>&1 | grep -E "AutoLike|已点赞"  # 只看点赞
++docker compose restart astrbot                       # 重启（改完配置）
++docker compose pull && docker compose up -d          # 升级 AstrBot
++
++# 备份（含 Cookie 与去重记录，注意保密）
++tar czf qzone-backup-$(date +%F).tgz astrbot/data/config astrbot/data/plugin_data
++```
++
++---
++
++## 六、定时健康检查（可选）
++
++Cookie 过期是**静默**的（点赞停了但不会主动通知你）。可以加一个 cron 定期检查：
++
++```bash
++cat > /opt/qzone-bot/check.sh <<'EOF'
++#!/bin/bash
++# 每天 9 点检查一次：最近一轮点赞是否有失败迹象
++cd /opt/qzone-bot
++if docker logs --since 24h astrbot 2>&1 | grep -q "登录状态失效"; then
++    echo "[$(date)] QQ空间 Cookie 已失效，请重新获取" >> /var/log/qzone-health.log
++fi
++EOF
++chmod +x /opt/qzone-bot/check.sh
++echo "0 9 * * * /opt/qzone-bot/check.sh" | crontab -
++```
++
++> 想做成主动通知（邮件 / 飞书 / 企业微信机器人），在 `check.sh` 里加一行 `curl` 即可。
++
++---
++
++## 七、常见部署问题
++
++| 现象 | 原因 | 处理 |
++|---|---|---|
++| 面板打不开 | 安全组没放行 6185 | 控制台加入站规则 |
++| `docker pull` 超时 | Docker Hub 拉不动 | 配镜像加速，或换国内源 |
++| 容器反复重启 | 内存不足（OOM） | `docker stats` 看；加内存或清插件 |
++| 插件加载报缺依赖 | 没装 `json5`/`Pillow`/`apilmoji` | 见「安装插件与依赖」 |
++| 日志 `Cookie 中缺少合法 uin` | Cookie 复制不全 | 重新复制，确认含 `uin=o...` |
++| 点赞成功但空间没有 | `like_use_http_key` 没开 | 设为 `true`，见 [03](03-点赞失效根因报告.md) |
+diff --git a/docs/README.md b/docs/README.md
+new file mode 100644
+index 0000000..09d4cf5
+--- /dev/null
++++ b/docs/README.md
+@@ -0,0 +1,18 @@
++# 文档索引
++
++| 文档 | 内容 | 适合谁看 |
++|---|---|---|
++| [01 · 快速开始](01-快速开始.md) | 两种运行模式怎么选、安装、拿 Cookie、填配置、验证 | 第一次部署 |
++| [02 · 配置详解](02-配置详解.md) | 每一个配置项的含义、定时语义、推荐参数 | 调参 |
++| [03 · 点赞失效根因报告](03-点赞失效根因报告.md) | **完整排查过程与证据链**：为什么日志说成功、空间里却没有赞 | 想搞懂原理 / 想给上游提 PR |
++| [04 · 常见问题](04-常见问题.md) | 点赞、Cookie、任务、安装、安全 五大类 FAQ | 出问题时先看这里 |
++| [05 · 补丁清单](05-补丁清单.md) | 逐条补丁的改动、原因、diff 片段、回滚方法 | 想合并上游更新 / 审代码 |
++| [06 · 部署到服务器](06-部署到服务器.md) | Docker Compose 最小部署、安全组、运维命令、健康检查 | 上服务器 |
++
++## 一分钟版本
++
++1. 服务器上 **不需要**登录 QQ（纯 Cookie 模式），不会挤掉你自己的 QQ
++2. 拿到 QQ空间 Cookie，填进 `qzone_cookie`
++3. **确认 `trigger.like_use_http_key = true`** ← 关掉点赞就会静默失效
++4. `like_only = true` 只点赞不评论，`like_cron = 0 */2 * * *` 每两小时一次
++5. 用 `tools/qzone_check.py --list` 确认赞真的点上了，不要只信日志
+diff --git a/main.py b/main.py
+index 0d6f2c5..32d4ef0 100644
+--- a/main.py
++++ b/main.py
+@@ -15,7 +15,7 @@ from .core.db import PostDB
+ from .core.llm_action import LLMAction
+ from .core.model import Comment, Post
+ from .core.qzone import QzoneAPI, QzoneParser, QzoneSession
+-from .core.scheduler import AutoComment, AutoPublish
++from .core.scheduler import AutoComment, AutoLike, AutoPublish
+ from .core.sender import Sender
+ from .core.service import PostService
+ from .core.utils import get_ats, get_image_urls, parse_range
+@@ -50,6 +50,8 @@ class QzonePlugin(Star):
+         self.campus_wall = CampusWall(self.cfg, self.service, self.db, self.sender)
+         # 自动评论模块
+         self.auto_comment: AutoComment | None = None
++        # 自动点赞模块（本地补丁新增）
++        self.auto_like: AutoLike | None = None
+         # 自动发说说模块
+         self.auto_publish: AutoPublish | None = None
+         self._page_post_refs: dict[str, Post] = {}
+@@ -62,6 +64,10 @@ class QzonePlugin(Star):
+         if not self.auto_comment and self.cfg.trigger.comment_cron:
+             self.auto_comment = AutoComment(self.cfg, self.service, self.sender)
+ 
++        # 本地补丁：自动点赞任务
++        if not self.auto_like and self.cfg.trigger.like_cron:
++            self.auto_like = AutoLike(self.cfg, self.service, self.sender)
++
+         if not self.auto_publish and self.cfg.trigger.publish_cron:
+             self.auto_publish = AutoPublish(self.cfg, self.service, self.sender)
+ 
+@@ -448,6 +454,8 @@ class QzonePlugin(Star):
+             await self.qzone.close()
+         if self.auto_comment:
+             await self.auto_comment.terminate()
++        if self.auto_like:
++            await self.auto_like.terminate()
+         if self.auto_publish:
+             await self.auto_publish.terminate()
+ 
+diff --git a/metadata.yaml b/metadata.yaml
+index 17a21df..4eb4afe 100644
+--- a/metadata.yaml
++++ b/metadata.yaml
+@@ -1,7 +1,7 @@
+ name: astrbot_plugin_qzone
+ display_name: QQ空间
+-desc: QQ空间对接插件, 支持查看/点赞/评论说说、自动发说说、AI写说说、表白墙投稿与审核等功能
+-help: 略
+-version: v3.1.3
+-author: Zhalslar
+-repo: https://github.com/Zhalslar/astrbot_plugin_qzone
++desc: QQ空间对接插件（Fork）：修复点赞静默失效、支持纯 Cookie 模式免登录 QQ、可只点赞不评论
++help: 详见 README.md 与 docs/ 目录
++version: v3.2.0
++author: Zhalslar（上游） / YOUR_GITHUB_USERNAME（本 Fork）
++repo: https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
+diff --git a/tests/test_qzone_check.py b/tests/test_qzone_check.py
+new file mode 100644
+index 0000000..3a2b5c7
+--- /dev/null
++++ b/tests/test_qzone_check.py
+@@ -0,0 +1,137 @@
++# -*- coding: utf-8 -*-
++"""
++tools/qzone_check.py 的离线单元测试（不联网）。
++
++运行：
++    python3 -m unittest discover -s tests -v
++或：
++    python3 tests/test_qzone_check.py
++"""
++
++import os
++import sys
++import unittest
++
++sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools"))
++
++from qzone_check import (  # noqa: E402
++    QzoneClient,
++    calc_gtk,
++    parse_cookie,
++    unescape_qzone_html,
++)
++
++
++class TestCalcGtk(unittest.TestCase):
++    """g_tk 算法必须和 QZone 前端一致，否则所有写接口都会失败"""
++
++    def test_known_vectors(self):
++        self.assertEqual(calc_gtk("TESTp_skey123"), "1922077510")
++        self.assertEqual(calc_gtk("@FAKEskey_TEST"), "982067927")
++
++    def test_empty(self):
++        # 空字符串时只有初始值 5381
++        self.assertEqual(calc_gtk(""), "5381")
++
++    def test_result_is_positive_int_string(self):
++        for skey in ("a", "abc", "\u4e2d\u6587", "x" * 500):
++            v = calc_gtk(skey)
++            self.assertTrue(v.isdigit())
++            self.assertLess(int(v), 0x80000000)
++
++
++class TestParseCookie(unittest.TestCase):
++    def test_plain(self):
++        jar = parse_cookie("uin=o123456; skey=abc; p_skey=def")
++        self.assertEqual(jar["uin"], "o123456")
++        self.assertEqual(jar["p_skey"], "def")
++
++    def test_with_cookie_prefix(self):
++        jar = parse_cookie("Cookie: uin=o123456; p_skey=def")
++        self.assertEqual(jar["uin"], "o123456")
++        self.assertEqual(jar["p_skey"], "def")
++
++    def test_multiline(self):
++        jar = parse_cookie("uin=o1;\np_skey=abc;\nskey=xyz")
++        self.assertEqual(jar["p_skey"], "abc")
++        self.assertEqual(jar["skey"], "xyz")
++
++    def test_empty(self):
++        self.assertEqual(parse_cookie(""), {})
++        self.assertEqual(parse_cookie(None), {})
++
++
++class TestUnescape(unittest.TestCase):
++    def test_unescape_like_button(self):
++        raw = (
++            'class=\\x22item qz_like_btn_v3 \\x22 data-islike=\\x220\\x22 '
++            'data-unikey=\\x22http:\\/\\/user.qzone.qq.com\\/123\\/mood\\/abc\\x22'
++        )
++        out = unescape_qzone_html(raw)
++        self.assertIn('data-islike="0"', out)
++        self.assertIn("http://user.qzone.qq.com/123/mood/abc", out)
++
++
++class TestParseLikeButtons(unittest.TestCase):
++    """这是本项目的核心判据：从动态流 HTML 里读真实点赞状态"""
++
++    SAMPLE = (
++        '<a class="item qz_like_btn_v3 " data-islike="0" data-likecnt="0" '
++        'data-showcount="1" data-unikey="http://user.qzone.qq.com/111/mood/aaa111" '
++        'data-curkey="http://user.qzone.qq.com/111/mood/aaa111">'
++        '<a class="item qz_like_btn_v3 item-on" data-islike="1" data-likecnt="13" '
++        'data-showcount="12" data-unikey="http://user.qzone.qq.com/222/mood/bbb222" '
++        'data-curkey="http://user.qzone.qq.com/222/mood/bbb222">'
++    )
++
++    def test_parses_both_buttons(self):
++        items = QzoneClient._parse_like_buttons(self.SAMPLE)
++        self.assertEqual(len(items), 2)
++
++        first, second = items
++        self.assertEqual(first["islike"], 0)
++        self.assertEqual(first["likecnt"], 0)
++        self.assertEqual(first["owner"], "111")
++        self.assertEqual(first["tid"], "aaa111")
++
++        self.assertEqual(second["islike"], 1)
++        self.assertEqual(second["likecnt"], 13)
++        self.assertEqual(second["owner"], "222")
++
++    def test_dedup_same_unikey(self):
++        items = QzoneClient._parse_like_buttons(self.SAMPLE + self.SAMPLE)
++        self.assertEqual(len(items), 2)
++
++    def test_empty_html(self):
++        self.assertEqual(QzoneClient._parse_like_buttons(""), [])
++
++    def test_unikey_keeps_http_scheme(self):
++        """unikey 必须原样保留（http://），这正是点赞能否生效的关键"""
++        items = QzoneClient._parse_like_buttons(self.SAMPLE)
++        self.assertTrue(all(i["unikey"].startswith("http://") for i in items))
++
++
++class TestClientValidation(unittest.TestCase):
++    def test_missing_uin(self):
++        with self.assertRaises(ValueError):
++            QzoneClient("skey=abc; p_skey=def")
++
++    def test_missing_p_skey(self):
++        with self.assertRaises(ValueError):
++            QzoneClient("uin=o123456")
++
++    def test_empty_cookie(self):
++        with self.assertRaises(ValueError):
++            QzoneClient("")
++
++    def test_accepts_uin_without_prefix(self):
++        c = QzoneClient("uin=123456; p_skey=def")
++        self.assertEqual(c.uin, 123456)
++
++    def test_extra_cookie_fields_are_forwarded(self):
++        c = QzoneClient("uin=o123456; p_skey=def; ptcz=xyz")
++        self.assertIn("ptcz=xyz", c.header_cookie)
++
++
++if __name__ == "__main__":
++    unittest.main(verbosity=2)
+diff --git a/tools/qzone_check.py b/tools/qzone_check.py
+new file mode 100644
+index 0000000..46452e0
+--- /dev/null
++++ b/tools/qzone_check.py
+@@ -0,0 +1,386 @@
++#!/usr/bin/env python3
++# -*- coding: utf-8 -*-
++"""
++qzone_check.py — QQ空间「点赞状态」自查工具
++
++为什么需要它？
++    点赞接口 internal_dolike_app 对「首次点赞」「重复点赞」「参数被忽略」三种情况
++    返回完全一样的 {"code":0,"message":"succ"}，所以：
++        · 日志说"已点赞" —— 不可信
++        · 接口返回 succ  —— 不可信
++    真正可信的是好友动态流 HTML 里点赞按钮携带的 data-islike / data-likecnt 字段。
++    本工具就靠读它来判断赞到底有没有真的点上。
++
++用法：
++    # Cookie 三种给法（任选其一）
++    export QZONE_COOKIE='uin=o123456789; skey=@xxx; p_skey=xxx; ...'
++    python3 qzone_check.py --cookie 'uin=o...; p_skey=...'
++    python3 qzone_check.py --cookie-file cookie.txt
++
++    python3 qzone_check.py --list                 # 列出动态流里每条动态的真实点赞状态
++    python3 qzone_check.py --like-latest          # 点赞最新一条「未赞」的动态，并自动回查
++    python3 qzone_check.py --like <unikey>        # 点赞指定的 unikey
++    python3 qzone_check.py --list --json          # 以 JSON 输出，便于脚本处理
++
++退出码：
++    0 正常；1 参数/网络错误；2 点赞后回查发现没生效
++
++依赖：仅 Python 标准库（3.8+）
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import re
++import ssl
++import sys
++import time
++import urllib.parse
++import urllib.request
++
++
++FEED_URL = (
++    "https://user.qzone.qq.com/proxy/domain/ic2.qzone.qq.com/cgi-bin/feeds/feeds3_html_more"
++)
++DOLIKE_URL = (
++    "https://user.qzone.qq.com/proxy/domain/w.qzone.qq.com/cgi-bin/likes/internal_dolike_app"
++)
++UA = (
++    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
++    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
++)
++
++
++def build_ssl_context(insecure: bool = False) -> ssl.SSLContext:
++    """
++    构建 SSL 上下文。
++
++    很多国内 Python 环境（尤其是 macOS 官方安装包）默认 CA 库是空的，
++    会直接报 CERTIFICATE_VERIFY_FAILED。这里优先用 certifi 的证书包，
++    实在不行才让调用方走 --insecure。
++    """
++    if insecure:
++        return ssl._create_unverified_context()
++    try:
++        import certifi
++
++        return ssl.create_default_context(cafile=certifi.where())
++    except Exception:
++        return ssl.create_default_context()
++
++
++# --------------------------------------------------------------------------- #
++# 基础工具
++# --------------------------------------------------------------------------- #
++def calc_gtk(p_skey: str) -> str:
++    """由 p_skey 计算 g_tk（QZone 系通用算法）"""
++    h = 5381
++    for ch in p_skey:
++        h += (h << 5) + ord(ch)
++    return str(h & 0x7FFFFFFF)
++
++
++def parse_cookie(raw: str) -> dict[str, str]:
++    """
++    解析 Cookie 字符串。
++
++    兼容以下常见粘贴姿势：
++      · 单行：uin=o123; skey=abc; p_skey=def
++      · 整行：Cookie: uin=o123; p_skey=def
++      · 多行（从 DevTools 表格里复制出来的换行版）
++    """
++    raw = (raw or "").strip()
++    if raw.lower().startswith("cookie:"):
++        raw = raw[len("cookie:") :].strip()
++
++    # 换行 / 制表符统一成分号，并压掉多余的分号，避免出现空字段中断解析
++    raw = re.sub(r"[\r\n\t]+", ";", raw)
++    raw = re.sub(r";\s*;+", ";", raw)
++
++    jar: dict[str, str] = {}
++    for part in raw.split(";"):
++        part = part.strip()
++        if not part or "=" not in part:
++            continue
++        key, value = part.split("=", 1)
++        key, value = key.strip(), value.strip()
++        if len(value) >= 2 and value[0] == value[-1] == '"':
++            value = value[1:-1]
++        if key:
++            jar[key] = value
++    return jar
++
++
++def unescape_qzone_html(text: str) -> str:
++    """动态流返回的是「JSON 里嵌 HTML」，引号斜杠都被转义了，先还原再解析"""
++    for a, b in (
++        ("\\\\x22", '"'),
++        ("\\x22", '"'),
++        ("\\\\/", "/"),
++        ("\\/", "/"),
++        ('\\"', '"'),
++    ):
++        text = text.replace(a, b)
++    return text
++
++
++# --------------------------------------------------------------------------- #
++# API 客户端
++# --------------------------------------------------------------------------- #
++class QzoneClient:
++    def __init__(self, cookie_raw: str, timeout: int = 20, insecure: bool = False):
++        jar = parse_cookie(cookie_raw)
++        if not jar:
++            raise ValueError("Cookie 为空")
++
++        uin_text = jar.get("uin", "")
++        uin_text = uin_text[1:] if uin_text[:1].lower() == "o" else uin_text
++        if not uin_text.isdigit():
++            raise ValueError("Cookie 中缺少合法 uin（应形如 uin=o123456789）")
++
++        p_skey = jar.get("p_skey") or jar.get("skey")
++        if not p_skey:
++            raise ValueError("Cookie 中缺少 p_skey / skey")
++
++        self.uin = int(uin_text)
++        self.p_skey = p_skey
++        self.g_tk = calc_gtk(p_skey)
++        self.timeout = timeout
++        self.ssl_context = build_ssl_context(insecure)
++        # 除 uin/skey/p_skey 外的字段也一并带上，贴合浏览器行为
++        self.extra = {
++            k: v for k, v in jar.items() if k.lower() not in ("uin", "skey", "p_skey")
++        }
++        self.header_cookie = self._build_cookie_header()
++
++    def _build_cookie_header(self) -> str:
++        jar = dict(self.extra)
++        jar.update(
++            {"uin": f"o{self.uin}", "skey": self.p_skey, "p_skey": self.p_skey}
++        )
++        return "; ".join(f"{k}={v}" for k, v in jar.items())
++
++    def request(self, url: str, data: dict | None = None) -> str:
++        headers = {
++            "User-Agent": UA,
++            "Cookie": self.header_cookie,
++            "Referer": f"https://user.qzone.qq.com/{self.uin}",
++            "Origin": "https://user.qzone.qq.com",
++        }
++        body = None
++        if data is not None:
++            body = urllib.parse.urlencode(data).encode()
++            headers["Content-Type"] = "application/x-www-form-urlencoded"
++        req = urllib.request.Request(url, data=body, headers=headers)
++        with urllib.request.urlopen(
++            req, timeout=self.timeout, context=self.ssl_context
++        ) as resp:
++            return resp.read().decode("utf-8", "replace")
++
++    # ---------------- 读：好友动态流 ----------------
++    def fetch_feed(self) -> list[dict]:
++        params = {
++            "uin": self.uin,
++            "scope": 0,
++            "view": 1,
++            "filter": "all",
++            "flag": 1,
++            "applist": "all",
++            "pagenum": 1,
++            "aisortEndTime": 0,
++            "aisortOffset": 0,
++            "aisortBeginTime": 0,
++            "begintime": 0,
++            "format": "json",
++            "g_tk": self.g_tk,
++            "useutf8": 1,
++            "outputhtmlfeed": 1,
++        }
++        text = unescape_qzone_html(
++            self.request(FEED_URL + "?" + urllib.parse.urlencode(params))
++        )
++        return self._parse_like_buttons(text)
++
++    @staticmethod
++    def _parse_like_buttons(text: str) -> list[dict]:
++        """从动态流 HTML 里提取每条动态的点赞按钮状态"""
++        items: list[dict] = []
++        seen: set[str] = set()
++        for m in re.finditer(r"qz_like_btn_v3", text):
++            seg = text[m.start() : m.start() + 500]
++            unikey = re.search(r'data-unikey="([^"]+)"', seg)
++            if not unikey:
++                continue
++            key = unikey.group(1)
++            if key in seen:
++                continue
++            seen.add(key)
++
++            islike = re.search(r'data-islike="(\d)"', seg)
++            likecnt = re.search(r'data-likecnt="(\d+)"', seg)
++            owner = re.search(r"user\.qzone\.qq\.com/(\d+)/mood/([0-9a-zA-Z]+)", key)
++            items.append(
++                {
++                    "unikey": key,
++                    "islike": int(islike.group(1)) if islike else None,
++                    "likecnt": int(likecnt.group(1)) if likecnt else None,
++                    "owner": owner.group(1) if owner else None,
++                    "tid": owner.group(2) if owner else None,
++                }
++            )
++        return items
++
++    # ---------------- 写：点赞 ----------------
++    def like(self, unikey: str) -> dict:
++        owner = re.search(r"user\.qzone\.qq\.com/(\d+)/mood/([0-9a-zA-Z]+)", unikey)
++        if not owner:
++            raise ValueError(f"unikey 格式不对：{unikey}")
++        fid = owner.group(2)
++        data = {
++            "qzreferrer": f"https://user.qzone.qq.com/{self.uin}",
++            "opuin": self.uin,
++            # ★ 关键：unikey/curkey 必须保持调用方传入的原样（浏览器用的是 http:// 开头）
++            "unikey": unikey,
++            "curkey": unikey,
++            "appid": 311,
++            "from": 1,
++            "typeid": 0,
++            "abstime": int(time.time()),
++            "fid": fid,
++            "active": 0,
++            "format": "json",
++            "fupdate": 1,
++        }
++        raw = self.request(DOLIKE_URL + "?g_tk=" + self.g_tk, data)
++        try:
++            return json.loads(raw)
++        except json.JSONDecodeError:
++            return {"raw": raw}
++
++
++# --------------------------------------------------------------------------- #
++# 命令
++# --------------------------------------------------------------------------- #
++def _print_items(items: list[dict], as_json: bool) -> None:
++    if as_json:
++        print(json.dumps(items, ensure_ascii=False, indent=2))
++        return
++    if not items:
++        print("⚠️  动态流里没解析到任何动态（可能没有好友动态，或 Cookie 已失效）")
++        return
++    liked = sum(1 for i in items if i["islike"] == 1)
++    print(f"好友动态流：共 {len(items)} 条，其中已赞 {liked} 条\n")
++    for i in items:
++        flag = "✅ 已赞" if i["islike"] == 1 else "❌ 未赞"
++        cnt = "?" if i["likecnt"] is None else i["likecnt"]
++        print(f"  {flag}  likecnt={cnt:<4} {i['unikey']}")
++
++
++def cmd_list(client: QzoneClient, as_json: bool) -> int:
++    items = client.fetch_feed()
++    _print_items(items, as_json)
++    return 0
++
++
++def cmd_like(client: QzoneClient, unikey: str) -> int:
++    print(f"→ 点赞 {unikey}")
++    resp = client.like(unikey)
++    print(f"  接口返回：{json.dumps(resp, ensure_ascii=False)}")
++    print("  （注意：返回 succ 并不代表成功，继续回查……）")
++
++    time.sleep(3)
++    items = client.fetch_feed()
++    target = next((i for i in items if i["unikey"] == unikey), None)
++    if target is None:
++        print("  ⚠️  回查时目标动态已不在动态流里，无法确认")
++        return 1
++    if target["islike"] == 1:
++        print(f"  ✅ 回查确认：已赞（likecnt={target['likecnt']}）—— 点赞真实生效")
++        return 0
++    print(f"  ❌ 回查确认：仍是未赞（likecnt={target['likecnt']}）—— 点赞没有生效！")
++    print("     常见原因：unikey 使用了 https:// 前缀（必须与原样一致，通常是 http://）")
++    return 2
++
++
++def cmd_like_latest(client: QzoneClient) -> int:
++    items = client.fetch_feed()
++    pending = [i for i in items if i["islike"] == 0]
++    if not pending:
++        print("动态流里没有「未赞」的动态，无需操作")
++        return 0
++    target = pending[0]
++    print(f"选中最新一条未赞动态（owner={target['owner']} tid={target['tid']}）")
++    return cmd_like(client, target["unikey"])
++
++
++# --------------------------------------------------------------------------- #
++def load_cookie(args) -> str:
++    if args.cookie:
++        return args.cookie
++    if args.cookie_file:
++        with open(args.cookie_file, encoding="utf-8") as f:
++            return f.read()
++    env = os.environ.get("QZONE_COOKIE")
++    if env:
++        return env
++    sys.exit(
++        "错误：没有提供 Cookie。\n"
++        "  用法：export QZONE_COOKIE='uin=o...; skey=...; p_skey=...'\n"
++        "    或  python3 qzone_check.py --cookie '...'\n"
++        "    或  python3 qzone_check.py --cookie-file cookie.txt"
++    )
++
++
++def main() -> int:
++    ap = argparse.ArgumentParser(
++        description="QQ空间点赞状态自查工具（判据来自动态流的 data-islike 字段）",
++        formatter_class=argparse.RawDescriptionHelpFormatter,
++    )
++    ap.add_argument("--cookie", help="Cookie 字符串")
++    ap.add_argument("--cookie-file", help="从文件读取 Cookie")
++    ap.add_argument("--list", action="store_true", help="列出动态流每条动态的真实点赞状态")
++    ap.add_argument("--like", metavar="UNIKEY", help="点赞指定 unikey 并回查")
++    ap.add_argument("--like-latest", action="store_true", help="点赞最新一条未赞动态并回查")
++    ap.add_argument("--json", action="store_true", help="以 JSON 输出（配合 --list）")
++    ap.add_argument("--timeout", type=int, default=20, help="请求超时秒数（默认 20）")
++    ap.add_argument(
++        "--insecure",
++        action="store_true",
++        help="跳过 HTTPS 证书校验（仅在本地 CA 库损坏、且你信任网络环境时使用）",
++    )
++    args = ap.parse_args()
++
++    try:
++        client = QzoneClient(
++            load_cookie(args), timeout=args.timeout, insecure=args.insecure
++        )
++    except ValueError as e:
++        print(f"错误：{e}")
++        return 1
++
++    print(f"登录 QQ：{client.uin}   g_tk={client.g_tk}\n")
++
++    try:
++        if args.like:
++            return cmd_like(client, args.like)
++        if args.like_latest:
++            return cmd_like_latest(client)
++        return cmd_list(client, args.json)
++    except urllib.error.HTTPError as e:
++        print(f"HTTP 错误：{e.code} {e.reason}")
++        if e.code in (401, 403):
++            print("  → 通常是 Cookie 已失效，请重新获取")
++        return 1
++    except urllib.error.URLError as e:
++        reason = str(getattr(e, "reason", e))
++        print(f"网络错误：{reason}")
++        if "CERTIFICATE_VERIFY_FAILED" in reason:
++            print("  → 本地 Python 缺少 CA 证书。装一个 certifi 即可：pip install certifi")
++            print("  → 或临时跳过校验：加 --insecure")
++        return 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())

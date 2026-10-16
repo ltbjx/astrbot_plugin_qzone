@@ -1,5 +1,46 @@
 # Changelog
 
+## v3.2.0 — 增强 Fork
+
+> 本版本基于上游 v3.1.3（commit `10bf854`）。完整的排查过程与证据链见
+> [docs/03-点赞失效根因报告.md](docs/03-点赞失效根因报告.md)。
+
+### Bug 修复（严重）
+
+* **修复点赞静默失效**：点赞接口的 `unikey`/`curkey` 必须使用 `http://` 协议拼接。
+  上游使用 `https://`，接口会返回 `{"code":0,"message":"succ"}` 但**服务端直接忽略**，
+  导致"日志显示已点赞、空间里却没有赞"。新增 `trigger.like_use_http_key` 开关，**默认开启**。
+  依据来自动态流 HTML 中点赞按钮携带的 `data-unikey`（浏览器实际发送值）。
+* **修复点赞流程崩溃**：`core/qzone/client.py` 中写死 `parsed["data"].get("ret")`，
+  而点赞接口返回的 `data` 是字符串 `""`，必然抛
+  `'str' object has no attribute 'get'`。改为先判断 `isinstance(data, dict)`。
+* **修复定时任务永久断链**：任务采用「一次性任务链」，但 `add_job` 未设置
+  `misfire_grace_time`（APScheduler 默认仅 1 秒）。任务只要晚 1 秒执行就会被跳过，
+  而"排下一轮"写在被跳过的 `finally` 里，于是**任务链永久断掉、点赞静默失效且无任何报错**。
+  已设置 `misfire_grace_time=3600` 与 `coalesce=True`。
+* **修复点赞失败被记录为成功**：`PostService.like_posts()` 原本不检查返回值，
+  接口失败也照常打印「已点赞」并计入去重库。现在失败会抛出真实错误。
+* 修正日志中把偏移单位「秒」写成「分钟」的问题。
+
+### 新功能
+
+* **`AutoLike` 独立定时任务**：只点赞、不评论、不调用 LLM；带本地落盘去重
+  （`liked_tids.json`，保留最近 2000 条）与每条之间 8~20 秒随机间隔（防风控）。
+* **`trigger.like_only` 只点赞不评论模式**（默认开启）：不再自动评论好友动态；
+  上游的自动点赞挂在评论任务里，评论一旦失败会连带跳过点赞。
+* **手工 Cookie 模式**：新增 `qzone_cookie` 配置项，填写后无需 NapCat / QQ 客户端即可工作，
+  **不会把使用者本机或手机上的 QQ 挤下线**；Cookie 中除 `uin`/`skey`/`p_skey` 外的字段也会原样透传。
+* **`tools/qzone_check.py` 点赞状态自查工具**：从动态流的 `data-islike` 字段读取真实点赞状态，
+  支持 `--list` / `--like-latest` / `--like <unikey>` 并在点赞后自动回查，仅依赖标准库。
+
+### 文档
+
+* 新增 `docs/`：快速开始、配置详解、点赞失效根因报告、常见问题、补丁清单、服务器部署。
+* 新增 `NOTICE` 与 `patches/fork-vs-upstream.patch`（相对上游的完整 diff）。
+* 修正许可证说明：上游 README 徽章标注 MIT，但 `LICENSE` 文件实为 **GPL-3.0**，本 Fork 以文件为准。
+
+---
+
 ## v3.1.3
 
 * 统一使用内置卡片渲染器，Sender 直接创建并调用，移除工厂、协议与 pillowmd 回退分支。
