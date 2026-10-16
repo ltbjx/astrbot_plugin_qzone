@@ -15,7 +15,7 @@ from .core.db import PostDB
 from .core.llm_action import LLMAction
 from .core.model import Comment, Post
 from .core.qzone import QzoneAPI, QzoneParser, QzoneSession
-from .core.scheduler import AutoComment, AutoPublish
+from .core.scheduler import AutoComment, AutoLike, AutoPublish
 from .core.sender import Sender
 from .core.service import PostService
 from .core.utils import get_ats, get_image_urls, parse_range
@@ -50,6 +50,8 @@ class QzonePlugin(Star):
         self.campus_wall = CampusWall(self.cfg, self.service, self.db, self.sender)
         # 自动评论模块
         self.auto_comment: AutoComment | None = None
+        # 自动点赞模块（本地补丁新增）
+        self.auto_like: AutoLike | None = None
         # 自动发说说模块
         self.auto_publish: AutoPublish | None = None
         self._page_post_refs: dict[str, Post] = {}
@@ -61,6 +63,10 @@ class QzonePlugin(Star):
 
         if not self.auto_comment and self.cfg.trigger.comment_cron:
             self.auto_comment = AutoComment(self.cfg, self.service, self.sender)
+
+        # 本地补丁：自动点赞任务
+        if not self.auto_like and self.cfg.trigger.like_cron:
+            self.auto_like = AutoLike(self.cfg, self.service, self.sender)
 
         if not self.auto_publish and self.cfg.trigger.publish_cron:
             self.auto_publish = AutoPublish(self.cfg, self.service, self.sender)
@@ -448,6 +454,8 @@ class QzonePlugin(Star):
             await self.qzone.close()
         if self.auto_comment:
             await self.auto_comment.terminate()
+        if self.auto_like:
+            await self.auto_like.terminate()
         if self.auto_publish:
             await self.auto_publish.terminate()
 

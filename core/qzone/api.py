@@ -17,6 +17,9 @@ class QzoneAPI(QzoneHttpClient):
     """QQ 空间 HTTP API 封装"""
 
     BASE_URL = "https://user.qzone.qq.com"
+    # 本地补丁：点赞接口的 unikey/curkey 在某些情况下必须是 http:// 协议
+    # 参考社区 PR Zhalslar/astrbot_plugin_qzone#47（作者未合并，做成开关兜底）
+    BASE_URL_HTTP = "http://user.qzone.qq.com"
     UPLOAD_IMAGE_URL = "https://up.qzone.qq.com/cgi-bin/upload/cgi_upload_image"
     EMOTION_URL = "https://user.qzone.qq.com/proxy/domain/taotao.qzone.qq.com/cgi-bin/emotion_cgi_publish_v6"
     DOLIKE_URL = "https://user.qzone.qq.com/proxy/domain/w.qzone.qq.com/cgi-bin/likes/internal_dolike_app"
@@ -121,6 +124,12 @@ class QzoneAPI(QzoneHttpClient):
         点赞指定说说
         """
         ctx = await self.session.get_ctx()
+        # 本地补丁：unikey/curkey 的协议可切换（https 默认，http 兜底）
+        key_base = (
+            self.BASE_URL_HTTP
+            if getattr(self.cfg.trigger, "like_use_http_key", False)
+            else self.BASE_URL
+        )
         raw = await self.request(
             "POST",
             self.DOLIKE_URL,
@@ -130,8 +139,8 @@ class QzoneAPI(QzoneHttpClient):
             data={
                 "qzreferrer": f"{self.BASE_URL}/{ctx.uin}",  # 来源
                 "opuin": ctx.uin,  # 操作者QQ
-                "unikey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",  # 动态唯一标识
-                "curkey": f"{self.BASE_URL}/{post.uin}/mood/{post.tid}",  # 要操作的动态对象
+                "unikey": f"{key_base}/{post.uin}/mood/{post.tid}",  # 动态唯一标识
+                "curkey": f"{key_base}/{post.uin}/mood/{post.tid}",  # 要操作的动态对象
                 "appid": 311,  # 应用ID(说说:311)
                 "from": 1,  # 来源
                 "typeid": 0,  # 类型ID

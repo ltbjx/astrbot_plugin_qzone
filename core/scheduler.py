@@ -1,6 +1,9 @@
+import asyncio
+import json
 import random
 import zoneinfo
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -140,6 +143,11 @@ class AutoComment(AutoRandomCronTask):
         self.sender = sender
 
     async def do_task(self):
+        # 本地补丁：纯点赞模式下不自动评论好友说说（点赞交给 AutoLike 任务）
+        if getattr(self.cfg.trigger, "like_only", False):
+            logger.info("[AutoComment] like_only 已开启，跳过本轮自动评论")
+            return
+
         posts = await self.service.query_feeds(
             pos=0,
             num=20,
@@ -180,3 +188,88 @@ class AutoPublish(AutoRandomCronTask):
             return
         post = await self.service.publish_post(text=text)
         await self.sender.send_admin_post(post, message="定时发说说")
+
+
+class AutoLike(AutoRandomCronTask):
+    """
+    本地补丁新增：定时扫描好友动态流并自动点赞。
+
+    与官方 AutoComment 的区别：
+    - 只点赞，不评论（不需要 LLM）
+    - 用本地 JSON 记录已点赞的 tid 去重，不会每轮重复点赞同一条
+    - 每条点赞之间有随机间隔，降低风控概率
+    """
+
+    _STORE_LIMIT = 2000
+
+    def __init__(
+        self,
+        config: PluginConfig,
+        service: PostService,
+        sender: Sender,
+    ):
+        cron = config.trigger.like_cron
+        timezone = config.timezone
+        offset = config.trigger.like_offset
+        super().__init__("AutoLike", cron, timezone, offset)
+        self.cfg = config
+        self.service = service
+        self.sender = sender
+        self._store_path = Path(config.data_dir) / "liked_tids.json"
+        self._liked: list[str] = self._load_liked()
+
+    def _load_liked(self) -> list[str]:
+        try:
+            if self._store_path.exists():
+                data = json.loads(self._store_path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    return [str(t) for t in data if t]
+        except Exception as e:
+            logger.warning(f"[AutoLike] 已点赞记录读取失败，按空处理：{e}")
+        return []
+
+    def _save_liked(self) -> None:
+        try:
+            if len(self._liked) > self._STORE_LIMIT:
+                self._liked = self._liked[-self._STORE_LIMIT :]
+            self._store_path.write_text(
+                json.dumps(self._liked, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            logger.warning(f"[AutoLike] 已点赞记录写入失败：{e}")
+
+    async def do_task(self):
+        num = max(int(self.cfg.trigger.like_num or 20), 1)
+        delay_min = max(int(self.cfg.trigger.like_delay_min or 0), 0)
+        delay_max = max(int(self.cfg.trigger.like_delay_max or 0), delay_min)
+
+        # 注意：这里不带 no_commented，避免为每条动态额外请求详情接口
+        posts = await self.service.query_feeds(pos=0, num=num, no_self=True)
+
+        liked = 0
+        skipped = 0
+        for post in posts:
+            if not post.tid:
+                continue
+            if post.tid in self._liked:
+                skipped += 1
+                continue
+            try:
+                await self.service.like_posts(post)
+                self._liked.append(post.tid)
+                liked += 1
+                if delay_max:
+                    await asyncio.sleep(random.randint(delay_min, delay_max))
+            except Exception as e:
+                logger.exception(
+                    f"[AutoLike] 点赞失败 tid={post.tid} uin={post.uin} 昵称={post.name}：{e}"
+                )
+
+        if liked:
+            self._save_liked()
+
+        logger.info(
+            f"[AutoLike] 本轮检查 {len(posts)} 条动态，新点赞 {liked} 条，"
+            f"跳过已赞 {skipped} 条，去重库共 {len(self._liked)} 条"
+        )

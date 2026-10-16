@@ -145,6 +145,21 @@ class TriggerConfig(ConfigNode):
     read_prob: float
     send_admin: bool
     like_when_comment: bool
+    # ===== 本地补丁新增：纯点赞模式 =====
+    like_only: bool
+    """True = 自动任务只点赞不评论（AutoComment 自动跳过）"""
+    like_cron: str
+    """自动点赞任务的基准触发时间（Cron: 分 时 日 月 周）"""
+    like_offset: int
+    """自动点赞时间偏移（秒），围绕基准时间随机 ±N 秒"""
+    like_num: int
+    """自动点赞每轮最多处理多少条动态"""
+    like_delay_min: int
+    """每条点赞之间的最小间隔（秒），防风控"""
+    like_delay_max: int
+    """每条点赞之间的最大间隔（秒），防风控"""
+    like_use_http_key: bool
+    """True = 点赞接口 unikey/curkey 使用 http://（社区 PR #47 的兜底做法）"""
 
 
 class PluginConfig(ConfigNode):
