@@ -4,6 +4,11 @@
         "type": "string",
         "hint": "bot收到的投稿将在管理群里审批, 不填则将审批信息私发给bot管理员"
     },
+    "qzone_cookie": {
+        "description": "【补丁】QQ空间 Cookie（手工填写，填了就不需要登录 QQ）",
+        "type": "text",
+        "hint": "从浏览器登录 user.qzone.qq.com 后，F12 → Network → 任意 user.qzone.qq.com 请求 → 复制整行 cookie 的值粘到这里（必须包含 p_skey 和 uin）。填了这项，服务器上完全不需要 NapCat / QQ 客户端，也不会把你本机 QQ 挤下线。过期后点赞会失败，需要重新复制一次"
+    },
     "llm": {
         "description": "LLM模块配置",
         "type": "object",

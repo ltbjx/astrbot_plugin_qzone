@@ -170,6 +170,9 @@ class PluginConfig(ConfigNode):
     cookie_ttl: int
     timeout: int
     show_name: bool
+    # ===== 本地补丁新增：手工 Cookie（不依赖 NapCat / 不登录 QQ 客户端）=====
+    qzone_cookie: str
+    """手工填写的 QQ空间 Cookie（含 p_skey）。填了就优先用它，服务器无需登录 QQ"""
 
     _DB_VERSION = 5
     _plugin_name = "astrbot_plugin_qzone"
