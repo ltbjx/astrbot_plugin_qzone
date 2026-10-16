@@ -225,8 +225,16 @@ class PostService:
         """点赞帖子"""
         if not post.tid:
             raise ValueError("帖子 tid 为空")
-        await self.qzone.like(post)
+        # 本地补丁：上游不看返回值，接口失败也照样打印“已点赞”。
+        # 改成检查响应，失败直接抛错，避免“显示成功实际没点上”。
+        resp = await self.qzone.like(post)
+        if not resp.ok:
+            raise RuntimeError(
+                f"点赞接口返回失败：code={resp.code} message={resp.message} "
+                f"raw={str(resp.raw)[:200]}"
+            )
         logger.info(f"已点赞 → {post.name}")
+        return resp
 
     async def comment_posts(
         self, post: Post, event: AiocqhttpMessageEvent | None = None
