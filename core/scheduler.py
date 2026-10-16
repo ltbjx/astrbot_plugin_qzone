@@ -42,7 +42,7 @@ class AutoRandomCronTask:
         self._register_task()
 
         logger.info(
-            f"[{self.job_name}] 已启动，任务周期：{self.cron_expr}，偏移范围：±{self.offset_seconds} 分钟"
+            f"[{self.job_name}] 已启动，任务周期：{self.cron_expr}，偏移范围：±{self.offset_seconds} 秒"
         )
 
     def _register_task(self):
