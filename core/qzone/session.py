@@ -84,10 +84,16 @@ class QzoneSession:
             raise RuntimeError("Cookie 中缺少合法 uin（请确认复制的是 user.qzone.qq.com 的完整 Cookie）")
 
         self._last_refresh_at = monotonic()
+        extra = {
+            k: v
+            for k, v in c.items()
+            if k.lower() not in ("uin", "skey", "p_skey")
+        }
         return QzoneContext(
             uin=uin,
             skey=c.get("skey", ""),
             p_skey=c.get("p_skey", "") or c.get("skey", ""),
+            extra_cookies=extra,
         )
 
     def _is_cookie_expired(self) -> bool:

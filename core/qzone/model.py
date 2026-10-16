@@ -7,10 +7,18 @@ from .constants import QZONE_CODE_OK, QZONE_CODE_UNKNOWN, QZONE_INTERNAL_META_KE
 class QzoneContext:
     """统一封装 Qzone 请求所需的所有动态参数"""
 
-    def __init__(self, uin: int, skey: str, p_skey: str):
+    def __init__(
+        self,
+        uin: int,
+        skey: str,
+        p_skey: str,
+        extra_cookies: dict[str, str] | None = None,
+    ):
         self.uin = uin
         self.skey = skey
         self.p_skey = p_skey
+        # 本地补丁：手工 Cookie 模式下把浏览器里的其余字段也原样带上，提高接口成功率
+        self.extra_cookies: dict[str, str] = extra_cookies or {}
 
     @property
     def gtk2(self) -> str:
@@ -21,11 +29,15 @@ class QzoneContext:
         return str(hash_val & 0x7FFFFFFF)
 
     def cookies(self) -> dict[str, str]:
-        return {
-            "uin": f"o{self.uin}",
-            "skey": self.skey,
-            "p_skey": self.p_skey,
-        }
+        cookies = dict(self.extra_cookies)
+        cookies.update(
+            {
+                "uin": f"o{self.uin}",
+                "skey": self.skey,
+                "p_skey": self.p_skey,
+            }
+        )
+        return cookies
 
     def headers(self) -> dict[str, str]:
         return {
