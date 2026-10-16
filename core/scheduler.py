@@ -92,6 +92,11 @@ class AutoRandomCronTask:
                 trigger=DateTrigger(run_date=target_time, timezone=self.timezone),
                 name=f"{self.job_name}_once_{int(base_time.timestamp())}",
                 max_instances=1,
+                # 本地补丁：上游没设宽限期，任务只要晚 1 秒执行就会被 APScheduler 直接跳过，
+                # 而“下一轮”是在本轮执行完才排的 —— 于是整条任务链永久断掉、静默失效。
+                # 给 1 小时宽限，错过也补跑。
+                misfire_grace_time=3600,
+                coalesce=True,
             )
         except Exception as e:
             if self._terminated:
