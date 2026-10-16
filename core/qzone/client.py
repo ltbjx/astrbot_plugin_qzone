@@ -60,11 +60,18 @@ class QzoneHttpClient:
             parsed[QZONE_INTERNAL_META_KEY] = meta
         meta[QZONE_INTERNAL_HTTP_STATUS_KEY] = resp.status
 
+        # 本地补丁：上游这里假定 data 一定是 dict，但点赞等接口返回的 data 是字符串，
+        # 会直接抛 'str' object has no attribute 'get'，导致点赞流程整体崩掉。
+        data_field = parsed.get("data")
+
         # 仅在明确登录失效时触发重登
         if (
             resp.status == HTTP_STATUS_UNAUTHORIZED
             or parsed.get("code") == QZONE_CODE_LOGIN_EXPIRED
-            or parsed.get("data", {}).get("ret") == QZONE_CODE_IMAGE_EXPIRED
+            or (
+                isinstance(data_field, dict)
+                and data_field.get("ret") == QZONE_CODE_IMAGE_EXPIRED
+            )
         ):
             if retry >= 2:
                 raise RuntimeError("登录失效，重试失败")
