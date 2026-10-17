@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eef1f8">
+<title>QZone OS · 控制台</title>
+<style>
+  /* ========== 浅色 OS 桌面 + 玻璃拟态 + 红蓝点缀 ========== */
+  :root{
+    --bg:#eef1f8;
+    --red:#e5484d; --red-soft:#ffe8e9;
+    --blue:#2e6bff; --blue-soft:#e6eeff;
+    --ink:#12161f; --ink-2:#5b6472; --ink-3:#8a93a3;
+    --glass:rgba(255,255,255,.62);
+    --glass-strong:rgba(255,255,255,.84);
+    --stroke:rgba(255,255,255,.78);
+    --shadow:0 8px 32px rgba(28,39,71,.10);
+    --radius:20px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+       background:var(--bg);overflow-x:hidden;min-height:100vh}
+  body::before{content:"";position:fixed;inset:-20%;z-index:-2;
+    background:
+      radial-gradient(48% 42% at 12% 8%, rgba(46,107,255,.30), transparent 70%),
+      radial-gradient(46% 44% at 92% 12%, rgba(229,72,77,.26), transparent 70%),
+      radial-gradient(60% 55% at 78% 92%, rgba(46,107,255,.18), transparent 70%),
+      radial-gradient(50% 50% at 18% 96%, rgba(229,72,77,.14), transparent 70%);}
+  body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background-image:radial-gradient(rgba(18,22,31,.055) 1px, transparent 1px);
+    background-size:22px 22px;
+    mask-image:linear-gradient(#000, transparent 65%);-webkit-mask-image:linear-gradient(#000, transparent 65%);}
+
+  /* 顶部菜单栏 */
+  .menubar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;
+    padding:10px 18px;margin:0 auto;max-width:1180px;
+    backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);
+    background:var(--glass);border-bottom:1px solid rgba(255,255,255,.7);}
+  .menubar .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
+    font-size:12.5px;font-weight:600;background:rgba(255,255,255,.7);
+    border:1px solid rgba(255,255,255,.9);box-shadow:0 2px 10px rgba(28,39,71,.06);}
+  .pill .led{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
+  .pill.ok .led{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.16)}
+  .pill.warn .led{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.16)}
+  .pill.bad .led{background:var(--red);box-shadow:0 0 0 4px rgba(229,72,77,.16)}
+  .clock{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;color:var(--ink-2)}
+  .quit{font-size:12px;font-weight:600;color:var(--ink-3);text-decoration:none;padding:6px 10px;
+        border-radius:9px;border:1px solid rgba(18,22,31,.08);background:rgba(255,255,255,.6)}
+  .quit:hover{color:var(--red);border-color:rgba(229,72,77,.3)}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 100px}
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+  .card{grid-column:span 12;position:relative;padding:20px 22px;border-radius:var(--radius);
+    background:var(--glass);border:1px solid var(--stroke);
+    backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
+    box-shadow:var(--shadow);overflow:hidden;}
+  .card::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+    background:linear-gradient(160deg, rgba(255,255,255,.55), transparent 42%);opacity:.75;}
+  .card > *{position:relative;z-index:1}
+  .card h2{margin:0 0 14px;font-size:11.5px;font-weight:700;letter-spacing:1.4px;
+    text-transform:uppercase;color:var(--ink-3);display:flex;align-items:center;gap:8px}
+  .card h2::before{content:"";width:14px;height:3px;border-radius:2px;
+    background:linear-gradient(90deg,var(--blue),var(--red))}
+  @media(min-width:860px){ .c6{grid-column:span 6} .c4{grid-column:span 4} .c8{grid-column:span 8} }
+
+  .hero{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+  .time{font-size:46px;font-weight:800;letter-spacing:-1.5px;line-height:1;
+    font-variant-numeric:tabular-nums;
+    background:linear-gradient(120deg,var(--blue),#5b8cff 45%,var(--red));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .meta{font-size:13px;color:var(--ink-2);line-height:1.9}
+  .meta b{color:var(--ink)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .chip{font-size:12px;font-weight:600;padding:5px 11px;border-radius:9px;
+    background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.95);color:var(--ink-2)}
+  .chip.blue{background:var(--blue-soft);color:#1d4ed8;border-color:rgba(46,107,255,.16)}
+  .chip.red{background:var(--red-soft);color:#b42318;border-color:rgba(229,72,77,.16)}
+
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{font:inherit;font-size:13.5px;font-weight:600;border:0;cursor:pointer;color:#fff;
+    padding:11px 18px;border-radius:12px;transition:transform .12s,filter .18s;
+    background:linear-gradient(135deg,var(--blue),#4a7dff);box-shadow:0 6px 18px rgba(46,107,255,.28);}
+  button:hover{filter:brightness(1.06);transform:translateY(-1px)}
+  button:active{transform:translateY(0) scale(.99)}
+  button:disabled{opacity:.55;cursor:default;transform:none;filter:none}
+  button.red{background:linear-gradient(135deg,var(--red),#f26a6e);box-shadow:0 6px 18px rgba(229,72,77,.28)}
+  button.ghost{background:rgba(255,255,255,.72);color:var(--ink);
+    border:1px solid rgba(18,22,31,.08);box-shadow:0 2px 10px rgba(28,39,71,.06)}
+  button.ghost:hover{background:#fff}
+  button.mini{padding:8px 13px;font-size:12.5px;border-radius:10px}
+
+  .switch{display:inline-flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
+  .switch input{display:none}
+  .track{width:50px;height:29px;border-radius:999px;background:#d7dce6;position:relative;
+    transition:.22s;box-shadow:inset 0 1px 3px rgba(0,0,0,.12)}
+  .thumb{position:absolute;top:3px;left:3px;width:23px;height:23px;border-radius:50%;
+    background:#fff;transition:.22s;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+  .switch input:checked + .track{background:linear-gradient(135deg,var(--blue),#4a7dff)}
+  .switch input:checked + .track .thumb{left:24px}
+  .switch > span:last-child{font-size:13.5px;font-weight:600}
+
+  form.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:13px}
+  label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:600;color:var(--ink-2)}
+  input{font:inherit;font-size:14px;color:var(--ink);background:rgba(255,255,255,.82);
+    border:1px solid rgba(18,22,31,.10);border-radius:11px;padding:11px 12px;width:100%;
+    transition:border-color .16s,box-shadow .16s;}
+  input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,107,255,.14)}
+  .hint{font-size:12px;color:var(--ink-3);margin-top:10px;line-height:1.7}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+    background:rgba(46,107,255,.09);color:#1d4ed8;padding:1px 6px;border-radius:6px}
+
+  .msg{margin-top:12px;font-size:13px;font-weight:600;min-height:19px}
+  .msg.ok{color:#0f7b45}.msg.err{color:#b42318}
+
+  .logbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .seg{display:inline-flex;background:rgba(255,255,255,.7);border:1px solid rgba(18,22,31,.08);
+    border-radius:11px;padding:3px;gap:2px}
+  .seg button{background:transparent;color:var(--ink-2);box-shadow:none;padding:7px 13px;
+    border-radius:8px;font-size:12.5px}
+  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(28,39,71,.10)}
+  pre.logbox{margin:0;padding:14px 16px;border-radius:14px;max-height:360px;overflow:auto;
+    background:rgba(18,22,31,.92);color:#d6dee9;font-size:12px;line-height:1.62;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all;
+    border:1px solid rgba(255,255,255,.08)}
+  pre.logbox::-webkit-scrollbar{width:9px}
+  pre.logbox::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:9px}
+
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:9px 16px;font-size:13px}
+  .kv dt{color:var(--ink-3);font-weight:600}
+  .kv dd{margin:0;color:var(--ink);font-weight:600;word-break:break-all}
+  .secret{display:inline-flex;align-items:center;gap:8px}
+  .secret .val{font-family:ui-monospace,Menlo,monospace;letter-spacing:.4px}
+  .secret .val.hide{filter:blur(5px);user-select:none}
+
+  .hidden{display:none!important}
+  /* ===== 手机版适配 ===== */
+  @media (max-width:720px){
+    html{-webkit-text-size-adjust:100%}
+    .menubar{padding:8px 12px;gap:8px}
+    .pill{padding:5px 10px;font-size:12px;gap:6px}
+    .pill .led{width:6px;height:6px}
+    .clock{font-size:12px}
+    .wrap{padding:14px 12px calc(28px + env(safe-area-inset-bottom))}
+    .grid{gap:12px}
+    .card{padding:16px 15px;border-radius:18px}
+    .card h2{margin-bottom:12px}
+    .time{font-size:34px;letter-spacing:-1px}
+    .meta{font-size:12.5px}
+    .chip{font-size:11.5px;padding:5px 9px}
+    form.grid2{grid-template-columns:1fr 1fr;gap:10px}
+    input{font-size:16px;padding:12px}        /* 16px 可避免 iOS 聚焦自动放大 */
+    button{padding:12px 16px;font-size:14px;min-height:44px}
+    .row{gap:8px}
+    .row > button{flex:1 1 0;min-width:118px}
+    .seg button{min-height:36px}
+    pre.logbox{max-height:260px;font-size:11.5px}
+    .kv{grid-template-columns:1fr;gap:0}
+    .kv dt{margin-top:10px;font-size:12px}
+    .kv dd{font-size:13px}
+        #qr{width:190px!important;height:190px!important}
+  }
+  @media (max-width:380px){
+    form.grid2{grid-template-columns:1fr}
+    .time{font-size:28px}
+    .row > button{min-width:100%}
+  }
+</style>
+</head>
+<body id="top">
+
+<div class="menubar">
+  <span class="pill" id="pillLogin"><span class="led"></span><span id="loginText">连接中…</span></span>
+  <span class="pill" id="pillBot"><span class="led"></span><span id="botText">机器人</span></span>
+  <span class="pill" id="pillAuto"><span class="led"></span><span id="autoText">自动点赞</span></span>
+  <div class="spacer"></div>
+  <span class="clock" id="clock">--:--:--</span>
+  <a href="/logout" class="quit" title="退出登录">退出</a>
+</div>
+
+<div class="wrap">
+  <div class="grid">
+
+    <section class="card c8">
+      <h2>下次执行</h2>
+      <div class="hero">
+        <div class="time" id="nextTime">--:--</div>
+        <div class="meta" id="nextMeta">正在读取排期…</div>
+      </div>
+      <div class="chips" id="chips"></div>
+    </section>
+
+    <section class="card c4">
+      <h2>快捷操作</h2>
+      <div class="row">
+        <button id="btnLike">⚡ 立即点赞</button>
+        <button id="btnRestart" class="red">⟳ 重启机器人</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost mini" id="btnTestCookie">🍪 测 Cookie</button>
+        <button class="ghost mini" id="btnClearDedup">🧹 清去重</button>
+      </div>
+      <div class="msg" id="actMsg"></div>
+      <pre class="logbox hidden" id="testOut" style="max-height:150px;margin-top:10px"></pre>
+    </section>
+
+    <section class="card c4">
+      <h2>自动点赞开关</h2>
+      <label class="switch">
+        <input type="checkbox" id="autoSwitch">
+        <span class="track"><span class="thumb"></span></span>
+        <span id="autoLabel">读取中…</span>
+      </label>
+      <div class="hint">关闭后仍保留原周期，再次打开会自动恢复。「立即点赞」不受开关影响。</div>
+    </section>
+
+    <section class="card c8">
+      <h2>执行设置</h2>
+      <form id="cfgForm" class="grid2">
+        <label>执行周期（Cron）<input id="cron" placeholder="0 */2 * * *" autocomplete="off"></label>
+        <label>随机偏移下限（分钟）<input id="offMin" type="number" step="1" value="-30"></label>
+        <label>随机偏移上限（分钟）<input id="offMax" type="number" step="1" value="60"></label>
+        <label>每轮最多点赞<input id="num" type="number" min="1" max="50" value="20"></label>
+        <label>点赞最小间隔（秒）<input id="dMin" type="number" min="0" max="300" value="8"></label>
+        <label>点赞最大间隔（秒）<input id="dMax" type="number" min="0" max="600" value="20"></label>
+      </form>
+      <div class="row" style="margin-top:14px">
+        <button id="btnSave">💾 保存并生效</button>
+        <span class="hint" style="margin:0">Cron 留空 = 关闭自动点赞</span>
+      </div>
+      <div class="msg" id="saveMsg"></div>
+    </section>
+
+    <section class="card c6">
+      <h2>服务器连接</h2>
+      <dl class="kv">
+        <dt>地址</dt><dd id="srvHost">-</dd>
+        <dt>SSH</dt><dd id="srvSsh">-</dd>
+        <dt>SSH 密码</dt><dd id="srvPass">-</dd>
+        <dt>控制台</dt><dd id="srvPanel">-</dd>
+        <dt>Cookie</dt><dd id="srvCookie">-</dd>
+        <dt>去重库</dt><dd id="srvDedup">-</dd>
+      </dl>
+      <div class="row" style="margin-top:14px">
+        <a id="btnTerminal" class="hidden" href="#" target="_blank" rel="noopener"><button class="ghost">🖥 打开网页终端</button></a>
+      </div>
+      <div class="hint">网页终端需先在服务器装好 ttyd（见 keeper/README.md）。</div>
+    </section>
+
+    <section class="card c6 hidden" id="qrCard">
+      <h2>扫码登录</h2>
+      <div class="row" style="align-items:flex-start;gap:18px">
+        <img id="qr" src="/qr.png" alt="二维码"
+             style="width:220px;height:220px;image-rendering:pixelated;background:#fff;border-radius:14px;padding:10px;box-shadow:0 6px 20px rgba(28,39,71,.12)">
+        <div class="hint" style="margin:0;max-width:220px">
+          手机 QQ 扫码登录 <b>空间网页版</b>（不是 QQ 客户端，不影响你电脑/手机上的 QQ）。<br><br>二维码每 30 秒自动刷新。
+        </div>
+      </div>
+    </section>
+
+    <section class="card c6">
+      <h2>信任设备</h2>
+      <div id="devList" class="hint" style="margin:0">加载中…</div>
+      <div class="hint">在这些设备上输对过密码，之后打开面板<b>自动进入</b>，不用再输密码。发现陌生设备就点「撤销」。</div>
+    </section>
+
+    <section class="card">
+      <h2>运行日志</h2>
+      <div class="logbar">
+        <div class="seg">
+          <button id="segTail" class="on">最新</button>
+          <button id="segHead">启动日志 · 操作记录</button>
+        </div>
+        <button class="ghost mini" id="btnRefresh">🔄 刷新</button>
+        <button class="ghost mini" id="btnPause">⏸ 暂停</button>
+      </div>
+      <pre class="logbox" id="logs">加载中…</pre>
+    </section>
+
+  </div>
+</div>
+
+
+<script>
+const $ = id => document.getElementById(id);
+let nextTs = 0, paused = false, logWhere = 'tail', autoOn = true, srv = {};
+
+setInterval(() => {
+  $('clock').textContent = new Date().toLocaleTimeString('zh-CN', {hour12:false});
+}, 1000);
+
+function tick(){
+  if(!nextTs) return;
+  const left = Math.max(0, Math.floor(nextTs - Date.now()/1000));
+  const h = Math.floor(left/3600), m = Math.floor(left%3600/60), s = left%60;
+  $('nextMeta').innerHTML = left > 0
+    ? `还有 <b>${h?h+' 小时 ':''}${m} 分 ${String(s).padStart(2,'0')} 秒</b>`
+    : '<b>已到执行时间，等待插件执行…</b>';
+}
+setInterval(tick, 1000);
+
+function secret(text){
+  if(!text) return '未配置';
+  const esc = String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return `<span class="secret"><span class="val hide">${esc}</span>` +
+         `<button class="ghost mini" onclick="this.previousElementSibling.classList.toggle('hide')">显示</button></span>`;
+}
+
+async function loadState(){
+  try{
+    const r = await fetch('/api/state', {cache:'no-store'});
+    if(!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    const k = d.keeper || {}, n = d.next_run || {}, t = (d.config && d.config.trigger) || {};
+    srv = d.sys || {};
+
+    const ph = k.phase || '';
+    const ok = ph === 'logged_in';
+    $('pillLogin').className = 'pill ' + (ok ? 'ok' : (ph === 'error' ? 'bad' : 'warn'));
+    $('loginText').textContent = ok ? '已登录' : (ph === 'error' ? '出错' : '待扫码');
+    $('qrCard').classList.toggle('hidden', ok);
+
+    const botst = (d.bot || {}).status || '';
+    const botOk = botst === 'running';
+    $('pillBot').className = 'pill ' + (botOk ? 'ok' : (botst ? 'warn' : 'bad'));
+    $('botText').textContent = '机器人 ' + (botst === 'running' ? '运行中'
+        : botst === 'restarting' ? '重启中' : (botst || '未知'));
+
+    autoOn = !!srv.auto_enabled;
+    $('autoSwitch').checked = autoOn;
+    $('pillAuto').className = 'pill ' + (autoOn ? 'ok' : '');
+    $('autoText').textContent = autoOn ? '自动点赞 开' : '自动点赞 关';
+    $('autoLabel').textContent = autoOn ? '已开启' : '已关闭';
+
+    if(n.known && n.target_ts){
+      nextTs = n.target_ts;
+      const dt = new Date(n.target_ts * 1000);
+      $('nextTime').textContent = dt.toLocaleTimeString('zh-CN',{hour12:false}).slice(0,5);
+      tick();
+      const off = n.offset_minutes ?? 0;
+      $('chips').innerHTML =
+        `<span class="chip blue">基准 ${n.base ? n.base.slice(11,16) : '-'}</span>` +
+        `<span class="chip ${off>0?'red':'blue'}">偏移 ${off>0?'+':''}${off} 分钟</span>` +
+        `<span class="chip">周期 <code>${n.cron || '-'}</code></span>` +
+        `<span class="chip">登录 ${ok?'✅':'⏳'}</span>`;
+    }else{
+      nextTs = 0;
+      $('nextTime').textContent = autoOn ? '--:--' : '已关闭';
+      $('nextMeta').textContent = autoOn ? '还没读到排期文件' : '自动点赞已关闭（可随时开启）';
+      $('chips').innerHTML = '';
+    }
+
+    if(!window._filled){
+      $('cron').value = t.like_cron ?? '';
+      $('offMin').value = Math.round((t.like_offset_min ?? -1800)/60);
+      $('offMax').value = Math.round((t.like_offset_max ?? 3600)/60);
+      $('num').value = t.like_num ?? 20;
+      $('dMin').value = t.like_delay_min ?? 8;
+      $('dMax').value = t.like_delay_max ?? 20;
+      window._filled = true;
+    }
+
+    $('srvHost').textContent = srv.host || location.hostname;
+    $('srvSsh').innerHTML = `<code>ssh -p ${srv.ssh_port||22} ${srv.ssh_user||'root'}@${srv.host||location.hostname}</code>`;
+    $('srvPass').innerHTML = secret(srv.ssh_pass);
+    $('srvPanel').innerHTML = `${srv.panel_user||'admin'} / ${secret(srv.panel_pass)}`;
+    $('srvCookie').textContent = srv.cookie_updated_at || '-';
+    $('srvDedup').textContent = (srv.dedup_count ?? 0) + ' 条';
+    if(srv.terminal_url){
+      // 终端地址跟随当前访问的主机（隧道走 127.0.0.1，公网走服务器 IP）
+      let termUrl = srv.terminal_url;
+      try {
+        const u = new URL(srv.terminal_url);
+        if (location.hostname) u.hostname = location.hostname;
+        termUrl = u.toString();
+      } catch(e) {}
+      $('btnTerminal').classList.remove('hidden');
+      $('btnTerminal').href = termUrl;
+    }
+  }catch(e){
+    $('pillLogin').className = 'pill bad';
+    $('loginText').textContent = '连接失败';
+  }
+}
+
+async function loadLogs(){
+  if(paused) return;
+  try{
+    const r = await fetch(`/api/logs?lines=120&where=${logWhere}`, {cache:'no-store'});
+    const d = await r.json();
+    const box = $('logs');
+    const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
+    box.textContent = (d.lines||[]).join('\n') || '（暂无日志）';
+    if(logWhere === 'tail' && atBottom) box.scrollTop = box.scrollHeight;
+  }catch(e){}
+}
+
+function act(msg, cls){ $('actMsg').className = 'msg ' + (cls||''); $('actMsg').textContent = msg || ''; }
+
+async function post(url, body){
+  const r = await fetch(url, {
+    method:'POST',
+    headers: body ? {'Content-Type':'application/json'} : {},
+    body: body ? JSON.stringify(body) : null
+  });
+  return r.json();
+}
+
+const doLike = async () => {
+  $('btnLike').disabled = true; act('下发中…');
+  try{
+    const d = await post('/api/like-now');
+    act(d.message, d.ok?'ok':'err');
+    setTimeout(() => { loadLogs(); loadState(); }, 3500);
+  }catch(e){ act('失败：'+e, 'err'); }
+  finally{ $('btnLike').disabled = false; }
+};
+$('btnLike').onclick = doLike;
+
+const doRestart = async () => {
+  if(!confirm('确定重启 AstrBot 容器？约 20 秒不可用。')) return;
+  const btns = [$('btnRestart')].filter(Boolean);
+  btns.forEach(b => b && (b.disabled = true));
+  act('正在下发重启指令…', '');
+
+  let started = false;
+  try{
+    const d = await post('/api/restart');
+    started = !!d.ok;
+    act(d.message, d.ok ? 'ok' : 'err');
+  }catch(e){
+    // 请求本身失败：面板可能正在重启 / 隧道断开了
+    act('面板暂时连不上（可能正在重启或网络中断），10 秒后刷新页面再点一次', 'err');
+  }
+
+  if(started){
+    // 轮询直到容器恢复
+    for(let i = 1; i <= 30; i++){
+      await new Promise(r => setTimeout(r, 2000));
+      try{
+        const s = await (await fetch('/api/state', {cache:'no-store'})).json();
+        const st = (s.bot || {}).status || '';
+        if(st === 'running'){
+          act(`✅ 已重启并恢复运行（约 ${i*2} 秒）`, 'ok');
+          break;
+        }
+        act(`重启中… 等待容器恢复（${i*2} 秒）`);
+      }catch(e){
+        act(`重启中… 面板暂无响应（${i*2} 秒）`);
+      }
+    }
+  }
+  btns.forEach(b => b && (b.disabled = false));
+  loadState(); loadLogs();
+};
+$('btnRestart').onclick = doRestart;
+
+$('btnTestCookie').onclick = async () => {
+  act('正在用 Cookie 拉取动态流…');
+  try{
+    const d = await post('/api/test-cookie');
+    act(d.message, d.ok?'ok':'err');
+    const out = $('testOut');
+    if(d.output && d.output.length){ out.classList.remove('hidden'); out.textContent = d.output.join('\n'); }
+    else out.classList.add('hidden');
+  }catch(e){ act('失败：'+e, 'err'); }
+};
+
+$('btnClearDedup').onclick = async () => {
+  if(!confirm('清空已点赞去重记录？下次会重新检查所有动态。')) return;
+  try{
+    const d = await post('/api/clear-dedup');
+    act(d.message, d.ok?'ok':'err');
+    loadState();
+  }catch(e){ act('失败：'+e, 'err'); }
+};
+
+$('autoSwitch').onchange = async (e) => {
+  const enabled = e.target.checked;
+  $('autoSwitch').disabled = true;
+  try{
+    const d = await post('/api/auto', {enabled});
+    act(d.message, d.ok?'ok':'err');
+    setTimeout(loadState, 2500);
+  }catch(err){
+    e.target.checked = !enabled;
+    act('切换失败：'+err, 'err');
+  }finally{ $('autoSwitch').disabled = false; }
+};
+
+$('btnSave').onclick = async () => {
+  $('saveMsg').className='msg'; $('saveMsg').textContent='保存中…';
+  const payload = {
+    like_cron: $('cron').value.trim(),
+    like_offset_min: Math.round(Number($('offMin').value)*60),
+    like_offset_max: Math.round(Number($('offMax').value)*60),
+    like_num: Number($('num').value),
+    like_delay_min: Number($('dMin').value),
+    like_delay_max: Number($('dMax').value),
+  };
+  try{
+    const d = await post('/api/config', payload);
+    $('saveMsg').className = 'msg ' + (d.ok?'ok':'err');
+    $('saveMsg').textContent = d.message;
+    if(d.ok) setTimeout(loadState, 3000);
+  }catch(e){ $('saveMsg').className='msg err'; $('saveMsg').textContent='失败：'+e; }
+};
+
+$('segTail').onclick = () => { logWhere='tail'; $('segTail').classList.add('on'); $('segHead').classList.remove('on'); loadLogs(); };
+$('segHead').onclick = () => { logWhere='head'; $('segHead').classList.add('on'); $('segTail').classList.remove('on'); loadLogs(); };
+$('btnRefresh').onclick = () => { loadState(); loadLogs(); };
+$('btnPause').onclick = () => {
+  paused = !paused;
+  $('btnPause').textContent = paused ? '▶️ 继续' : '⏸ 暂停';
+};
+
+
+async function loadDevices(){
+  try{
+    const d = await (await fetch('/api/devices', {cache:'no-store'})).json();
+    const list = d.devices || [];
+    const box = $('devList');
+    if(!list.length){ box.innerHTML = '还没有信任设备'; return; }
+    box.innerHTML = list.map(v => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+                  padding:9px 0;border-bottom:1px solid rgba(18,22,31,.06)">
+        <div>
+          <div style="font-weight:600;font-size:13px">${v.label || '未知设备'}</div>
+          <div style="font-size:11.5px;color:var(--ink-3)">
+            上次使用 ${v.last_seen || '-'} ｜ 添加于 ${v.created_at || '-'} ｜ 到期 ${v.expires || '-'}
+          </div>
+        </div>
+        <button class="ghost mini" onclick="revokeDev('${v.id}')">撤销</button>
+      </div>`).join('');
+  }catch(e){ $('devList').textContent = '读取失败'; }
+}
+
+async function revokeDev(id){
+  if(!confirm('撤销后这台设备下次需要重新输密码，确定？')) return;
+  try{
+    const r = await post('/api/devices/revoke', {id});
+    act(r.message, r.ok?'ok':'err');
+    loadDevices();
+  }catch(e){ act('撤销失败：'+e, 'err'); }
+}
+
+loadState(); loadLogs(); loadDevices();
+setInterval(loadState, 5000);
+setInterval(loadDevices, 30000);
+setInterval(loadLogs, 5000);
+</script>
+</body>
+</html>

@@ -28,6 +28,8 @@ class AutoRandomCronTask:
         cron_expr: str,
         timezone: zoneinfo.ZoneInfo,
         offset_seconds: int,
+        offset_lo: int | None = None,
+        offset_hi: int | None = None,
     ):
         self.timezone = timezone
         self.scheduler = AsyncIOScheduler(timezone=self.timezone)
@@ -36,13 +38,21 @@ class AutoRandomCronTask:
         self.cron_expr = cron_expr
         self.job_name = job_name
         self.offset_seconds = offset_seconds
+        # 本地补丁：支持不对称偏移区间 [offset_lo, offset_hi]（秒）。
+        # 不传则退回上游的对称 ±offset_seconds。
+        self.offset_lo = -offset_seconds if offset_lo is None else offset_lo
+        self.offset_hi = offset_seconds if offset_hi is None else offset_hi
+        if self.offset_lo > self.offset_hi:
+            self.offset_lo, self.offset_hi = self.offset_hi, self.offset_lo
+
         self._last_base_time: datetime | None = None
         self._terminated = False
 
         self._register_task()
 
         logger.info(
-            f"[{self.job_name}] 已启动，任务周期：{self.cron_expr}，偏移范围：±{self.offset_seconds} 秒"
+            f"[{self.job_name}] 已启动，任务周期：{self.cron_expr}，"
+            f"偏移范围：{self.offset_lo // 60} ~ {self.offset_hi // 60} 分钟（每次随机）"
         )
 
     def _register_task(self):
@@ -69,11 +79,9 @@ class AutoRandomCronTask:
 
         self._last_base_time = base_time
 
-        delay_seconds = (
-            random.randint(-self.offset_seconds, self.offset_seconds)
-            if self.offset_seconds
-            else 0
-        )
+        # 本地补丁：支持**不对称**随机偏移（如 -30 分钟 ~ +60 分钟）。
+        # 上游只有对称的 ±offset_seconds，随机性不够，容易看出"总在整点附近"的规律。
+        delay_seconds = random.randint(self.offset_lo, self.offset_hi)
         target_time = base_time + timedelta(seconds=delay_seconds)
 
         if target_time <= now:
@@ -83,8 +91,32 @@ class AutoRandomCronTask:
             )
 
         logger.info(
-            f"[{self.job_name}] 基准时间：{base_time}，偏移：{delay_seconds} 秒，执行时间：{target_time}"
+            f"[{self.job_name}] 基准时间：{base_time}，偏移：{delay_seconds // 60} 分钟"
+            f"（{delay_seconds} 秒），执行时间：{target_time}"
         )
+
+        # 本地补丁：把本轮排期写盘，供控制台展示「下次执行时间」
+        sf = getattr(self, "schedule_file", None)
+        if sf is not None:
+            try:
+                sf.write_text(
+                    json.dumps(
+                        {
+                            "job": self.job_name,
+                            "cron": self.cron_expr,
+                            "base": base_time.isoformat(),
+                            "offset_seconds": delay_seconds,
+                            "offset_minutes": round(delay_seconds / 60),
+                            "target": target_time.isoformat(),
+                            "target_ts": target_time.timestamp(),
+                            "updated_at": datetime.now(self.timezone).isoformat(),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+            except Exception as e:  # 写盘失败不影响调度
+                logger.debug(f"[{self.job_name}] 写排期文件失败：{e}")
 
         try:
             self.scheduler.add_job(
@@ -207,16 +239,34 @@ class AutoLike(AutoRandomCronTask):
 
     _STORE_LIMIT = 2000
 
+    async def run_now(self) -> None:
+        """控制台「立即点赞」用：跳过调度，直接跑一轮"""
+        logger.info("[AutoLike] 收到控制台指令，立即执行一轮")
+        await self.do_task()
+
     def __init__(
         self,
         config: PluginConfig,
         service: PostService,
         sender: Sender,
     ):
+        # 本地补丁：排期文件（控制台据此显示下次执行时间）
+        self.schedule_file = Path(config.data_dir) / "schedule.json"
         cron = config.trigger.like_cron
         timezone = config.timezone
         offset = config.trigger.like_offset
-        super().__init__("AutoLike", cron, timezone, offset)
+        # 本地补丁：优先使用不对称偏移区间（like_offset_min / like_offset_max），
+        # 例如 -1800 ~ 3600 秒 = 每次在基准点基础上随机 -30 分钟 ~ +60 分钟
+        lo = getattr(config.trigger, "like_offset_min", None)
+        hi = getattr(config.trigger, "like_offset_max", None)
+        super().__init__(
+            "AutoLike",
+            cron,
+            timezone,
+            offset,
+            offset_lo=None if lo is None else int(lo),
+            offset_hi=None if hi is None else int(hi),
+        )
         self.cfg = config
         self.service = service
         self.sender = sender
@@ -245,6 +295,11 @@ class AutoLike(AutoRandomCronTask):
             logger.warning(f"[AutoLike] 已点赞记录写入失败：{e}")
 
     async def do_task(self):
+        # 本地补丁（重要）：每轮开始都从磁盘重新读取去重库。
+        # 否则在控制台「清空去重」后，内存里仍是旧名单，会一直跳过所有动态
+        # —— 表现为"清空了去重、点了立即点赞，却一个都没重新检测"。
+        self._liked = self._load_liked()
+
         num = max(int(self.cfg.trigger.like_num or 20), 1)
         delay_min = max(int(self.cfg.trigger.like_delay_min or 0), 0)
         delay_max = max(int(self.cfg.trigger.like_delay_max or 0), delay_min)

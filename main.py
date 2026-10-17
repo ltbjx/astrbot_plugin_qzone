@@ -1,5 +1,8 @@
+import asyncio
 import base64
+import json
 import random
+from pathlib import Path
 
 from astrbot.api import logger
 from astrbot.api.event import filter
@@ -55,6 +58,8 @@ class QzonePlugin(Star):
         # 自动发说说模块
         self.auto_publish: AutoPublish | None = None
         self._page_post_refs: dict[str, Post] = {}
+        # 本地补丁：控制台指令监听任务
+        self._control_task: asyncio.Task | None = None
         self._register_page_web_apis()
 
     async def initialize(self):
@@ -70,6 +75,91 @@ class QzonePlugin(Star):
 
         if not self.auto_publish and self.cfg.trigger.publish_cron:
             self.auto_publish = AutoPublish(self.cfg, self.service, self.sender)
+
+        # 本地补丁：启动控制台指令监听（立即点赞 / 重载配置）
+        if self._control_task is None or self._control_task.done():
+            self._control_task = asyncio.create_task(self._control_watcher())
+
+    # ------------------------------------------------------------------ #
+    # 控制台指令通道
+    # 控制台（keeper 服务）不直接改插件内存，而是通过「标志文件 + 配置文件」
+    # 下发指令，插件这边轮询执行。这样不需要 docker.sock，也不需要重启 AstrBot。
+    # ------------------------------------------------------------------ #
+    async def _control_watcher(self) -> None:
+        data_dir = Path(self.cfg.data_dir)
+        like_flag = data_dir / "like_now.flag"
+        reload_flag = data_dir / "reload.flag"
+        logger.info(f"[控制台] 指令监听已启动（目录：{data_dir}）")
+
+        while True:
+            try:
+                await asyncio.sleep(2)
+
+                if like_flag.exists():
+                    try:
+                        like_flag.unlink()
+                    except OSError:
+                        pass
+                    logger.info("[控制台] 收到『立即点赞』指令")
+                    if self.auto_like is not None:
+                        await self.auto_like.run_now()
+                    else:
+                        logger.warning("[控制台] 自动点赞任务未启用（like_cron 为空）")
+
+                if reload_flag.exists():
+                    try:
+                        reload_flag.unlink()
+                    except OSError:
+                        pass
+                    logger.info("[控制台] 收到『重载配置』指令")
+                    await self._reload_config()
+
+            except asyncio.CancelledError:
+                logger.info("[控制台] 指令监听已停止")
+                raise
+            except Exception as e:
+                logger.warning(f"[控制台] 指令处理异常：{e}")
+
+    async def _reload_config(self) -> None:
+        """从磁盘重读插件配置并重建自动点赞任务（cron / 偏移在构造时读取）"""
+        from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+        cfg_path = (
+            Path(get_astrbot_data_path())
+            / "config"
+            / "astrbot_plugin_qzone_config.json"
+        )
+        if not cfg_path.is_file():
+            logger.warning(f"[控制台] 配置文件不存在：{cfg_path}")
+            return
+
+        try:
+            data = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+        except Exception as e:
+            logger.warning(f"[控制台] 配置解析失败：{e}")
+            return
+
+        # 就地更新底层 dict，并清掉 ConfigNode 的子节点缓存
+        try:
+            self.cfg._data.update(data)  # noqa: SLF001
+            self.cfg.__dict__.get("_children", {}).clear()  # noqa: SLF001
+        except Exception as e:
+            logger.warning(f"[控制台] 应用新配置失败：{e}")
+            return
+
+        # 重建点赞任务，让新的 cron / 偏移立即生效
+        if self.auto_like is not None:
+            try:
+                await self.auto_like.terminate()
+            except Exception:
+                pass
+            self.auto_like = None
+
+        if self.cfg.trigger.like_cron:
+            self.auto_like = AutoLike(self.cfg, self.service, self.sender)
+            logger.info("[控制台] 配置已重载，新的排期已生成")
+        else:
+            logger.info("[控制台] 配置已重载（自动点赞已关闭）")
 
     def _register_page_web_apis(self) -> None:
         routes = (
@@ -450,6 +540,9 @@ class QzonePlugin(Star):
 
     async def terminate(self):
         """插件卸载时"""
+        if self._control_task is not None:
+            self._control_task.cancel()
+            self._control_task = None
         if self.qzone:
             await self.qzone.close()
         if self.auto_comment:

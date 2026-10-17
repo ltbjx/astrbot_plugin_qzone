@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eef1f8">
+<title>登录 · QZone 控制台</title>
+<style>
+  :root{
+    --blue:#2e6bff; --red:#e5484d; --ink:#12161f; --ink-2:#5b6472; --ink-3:#8a93a3;
+    --glass:rgba(255,255,255,.66); --stroke:rgba(255,255,255,.8);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;
+       font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+       color:var(--ink);background:#eef1f8}
+  body::before{content:"";position:fixed;inset:-20%;z-index:-2;
+    background:
+      radial-gradient(48% 42% at 12% 8%, rgba(46,107,255,.32), transparent 70%),
+      radial-gradient(46% 44% at 92% 12%, rgba(229,72,77,.28), transparent 70%),
+      radial-gradient(60% 55% at 78% 92%, rgba(46,107,255,.18), transparent 70%),
+      radial-gradient(50% 50% at 18% 96%, rgba(229,72,77,.14), transparent 70%);}
+  body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background-image:radial-gradient(rgba(18,22,31,.055) 1px, transparent 1px);
+    background-size:22px 22px;
+    mask-image:linear-gradient(#000, transparent 65%);
+    -webkit-mask-image:linear-gradient(#000, transparent 65%);}
+
+  .card{
+    width:min(400px,100%);padding:30px 26px;border-radius:24px;
+    background:var(--glass);border:1px solid var(--stroke);
+    backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);
+    box-shadow:0 16px 48px rgba(28,39,71,.16);
+  }
+  h1{margin:0 0 6px;font-size:20px;font-weight:700;letter-spacing:-.3px}
+  .sub{margin:0 0 22px;font-size:13px;color:var(--ink-2);line-height:1.6}
+  label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin:0 0 7px}
+  input[type=text],input[type=password]{
+    width:100%;font:inherit;font-size:16px;padding:13px 14px;margin-bottom:16px;
+    color:var(--ink);background:rgba(255,255,255,.85);
+    border:1px solid rgba(18,22,31,.12);border-radius:12px;
+    transition:border-color .16s,box-shadow .16s;
+  }
+  input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,107,255,.15)}
+  .remember{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink-2);margin-bottom:20px}
+  .remember input{width:18px;height:18px;accent-color:var(--blue)}
+  button{
+    width:100%;font:inherit;font-size:16px;font-weight:600;color:#fff;border:0;cursor:pointer;
+    padding:14px;border-radius:13px;background:linear-gradient(135deg,var(--blue),#4a7dff);
+    box-shadow:0 8px 22px rgba(46,107,255,.3);
+  }
+  button:active{transform:scale(.99)}
+  .err{margin:0 0 16px;padding:11px 13px;border-radius:11px;font-size:13px;font-weight:600;
+       background:#ffe8e9;color:#b42318;border:1px solid rgba(229,72,77,.2)}
+  .tip{margin:18px 0 0;font-size:12px;color:var(--ink-3);line-height:1.7}
+  .tip code{background:rgba(46,107,255,.09);color:#1d4ed8;padding:1px 5px;border-radius:5px;
+            font-family:ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <h1>QZone 控制台</h1>
+    <p class="sub">登录后可查看下次点赞时间、一键点赞、改配置和看日志</p>
+
+    <!--ERROR-->
+
+    <label for="username">账号</label>
+    <input id="username" name="username" type="text" autocomplete="username"
+           autocapitalize="none" autocorrect="off" spellcheck="false"
+           placeholder="admin" value="admin" required>
+
+    <label for="password">密码</label>
+    <input id="password" name="password" type="password" autocomplete="current-password"
+           placeholder="密码" required>
+
+    <div class="remember">
+      <input id="remember" name="remember" type="checkbox" value="1" checked>
+      <label for="remember" style="margin:0">记住我（30 天免登录）</label>
+    </div>
+
+    <button type="submit">登录</button>
+
+    <p class="tip">
+      💡 首次登录成功后，iOS / macOS 会提示「存储密码」，选保存。
+      之后再来这个页面，点密码框就能用 <b>面容 ID / Touch ID 自动填入</b>，不用再手打。<br><br>
+      忘记密码？服务器上执行：<br>
+      <code>cat /opt/qzone-bot/astrbot/data/plugin_data/astrbot_plugin_qzone/panel_auth.json</code>
+    </p>
+  </form>
+</body>
+</html>

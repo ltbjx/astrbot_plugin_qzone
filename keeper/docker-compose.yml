@@ -1,0 +1,53 @@
+# QQ空间 Cookie 保活 + 控制台
+#
+# 用途：
+#   1) 常驻一个真实 Chromium，扫码登录一次后持续保活 QQ空间网页会话
+#   2) 提供控制台页面：下次执行时间 / 一键点赞 / 改周期与偏差 / 看日志
+#
+# 构建：docker compose build
+# 启动：docker compose up -d
+# 控制台：http://<服务器IP>:6186/   （账号密码见 docker logs qzone-keeper）
+#
+# 说明：
+#   · 登录的是「QQ空间网页版」，不是 QQ 客户端 —— 不会挤掉你电脑 / 手机上的 QQ
+#   · profile 目录必须持久化，否则容器重启就要重新扫码
+#   · 控制台通过「配置文件 + 标志文件」和 AstrBot 插件通信，不需要 docker.sock，也不用重启 AstrBot
+
+services:
+  qzone-keeper:
+    build: .
+    image: qzone-keeper:latest
+    container_name: qzone-keeper
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+      - QZONE_UIN=${QZONE_UIN:?请在 .env 里设置 QZONE_UIN}
+      - KEEPALIVE_SEC=${KEEPALIVE_SEC:-600}
+      - HTTP_PORT=6186
+      - OUT_DIR=/out
+      - STATE_DIR=/data
+      - BOT_DATA=/botdata
+      # 控制台账号（不填则自动生成，记录在 /out/panel_auth.json 与容器日志里）
+      - PANEL_USER=${PANEL_USER:-admin}
+      - PANEL_PASS=${PANEL_PASS:-}
+      # 面板「服务器连接」卡片展示用
+      - SERVER_HOST=${SERVER_HOST:-}
+      - SSH_PORT=${SSH_PORT:-22}
+      - SSH_USER=${SSH_USER:-root}
+      - SSH_PASS=${SSH_PASS:-}
+      - TERMINAL_URL=${TERMINAL_URL:-}
+      - BOT_CONTAINER=astrbot
+      - DOCKER_SOCK=/var/run/docker.sock
+    ports:
+      # 控制台 + 扫码页面（需要在云厂商安全组放行）
+      - "6186:6186"
+    volumes:
+      # 浏览器 profile + 状态（必须持久化，否则每次重启都要重新扫码）
+      - ./state:/data
+      # 插件数据目录：写 Cookie、写指令标志、读排期
+      - ../astrbot/data/plugin_data/astrbot_plugin_qzone:/out
+      # AstrBot 数据目录（控制台读写配置、读日志）
+      - ../astrbot/data:/botdata
+      # 用于面板的「重启机器人」按钮。若不需要该功能，注释掉这一行即可（面板会提示未挂载）
+      - /var/run/docker.sock:/var/run/docker.sock
+    shm_size: "512m"      # Chromium 需要，否则容易崩

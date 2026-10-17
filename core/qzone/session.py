@@ -1,5 +1,6 @@
 import asyncio
 from http.cookies import SimpleCookie
+from pathlib import Path
 from time import monotonic
 
 from astrbot.api import logger
@@ -56,6 +57,23 @@ class QzoneSession:
         # 本地补丁：优先使用手工配置的 Cookie，这样服务器上不需要登录 QQ 客户端
         # （NapCat 会以“电脑端”身份登录，会把用户本机 QQ 挤下线）
         cookies_str = str(getattr(self.cfg, "qzone_cookie", "") or "").strip()
+
+        # 本地补丁：Cookie 文件优先（Cookie 保活服务会持续刷新这个文件，
+        # 这样浏览器端会话续期后插件能自动跟上，不需要重启 AstrBot）
+        cookie_file = str(getattr(self.cfg, "qzone_cookie_file", "") or "").strip()
+        if cookie_file:
+            try:
+                p = Path(cookie_file)
+                if p.is_file():
+                    from_file = p.read_text(encoding="utf-8").strip()
+                    if from_file:
+                        if from_file != cookies_str:
+                            logger.info(f"已从文件加载 QQ空间 Cookie：{cookie_file}")
+                        cookies_str = from_file
+                else:
+                    logger.debug(f"Cookie 文件不存在，回退到 qzone_cookie：{cookie_file}")
+            except Exception as e:
+                logger.warning(f"读取 Cookie 文件失败，回退到 qzone_cookie：{e}")
 
         if cookies_str:
             logger.debug("使用配置中的手工 QQ空间 Cookie")

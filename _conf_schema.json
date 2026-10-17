@@ -9,6 +9,12 @@
         "type": "text",
         "hint": "从浏览器登录 user.qzone.qq.com 后，F12 → Network → 任意 user.qzone.qq.com 请求 → 复制整行 cookie 的值粘到这里（必须包含 p_skey 和 uin）。填了这项，服务器上完全不需要 NapCat / QQ 客户端，也不会把你本机 QQ 挤下线。过期后点赞会失败，需要重新复制一次"
     },
+    "qzone_cookie_file": {
+        "description": "【补丁】Cookie 文件路径（配合 Cookie 保活服务，优先级高于上面的手工 Cookie）",
+        "type": "string",
+        "hint": "填了之后插件会优先从这个文件读取 Cookie。配合 keeper/ 目录里的 Cookie 保活服务使用：保活服务会定时把浏览器里最新的 Cookie 写入该文件，插件自动跟上，无需重启。留空则只用上面的手工 Cookie",
+        "default": ""
+    },
     "llm": {
         "description": "LLM模块配置",
         "type": "object",
@@ -160,8 +166,8 @@
                 "default": "0 */2 * * *"
             },
             "like_offset": {
-                "description": "【补丁】自动点赞的时间偏移（秒）",
-                "hint": "围绕基准时间随机前后浮动，避免每次都在同一分钟发起请求",
+                "description": "【补丁】自动点赞的时间偏移（秒，对称 ±N）",
+                "hint": "围绕基准时间随机前后浮动。若下面两个不对称偏移项有值，则以它们为准",
                 "type": "int",
                 "slider": {
                     "min": 0,
@@ -169,6 +175,28 @@
                     "step": 1
                 },
                 "default": 900
+            },
+            "like_offset_min": {
+                "description": "【补丁】随机偏移下限（秒，可为负）",
+                "hint": "与下行组成不对称随机区间。例如下限 -1800、上限 3600 = 每次在基准点基础上随机 −30 分钟 ~ +60 分钟，规律性比对称偏移更弱。0 表示不提前",
+                "type": "int",
+                "slider": {
+                    "min": -3600,
+                    "max": 0,
+                    "step": 60
+                },
+                "default": -1800
+            },
+            "like_offset_max": {
+                "description": "【补丁】随机偏移上限（秒，可为正）",
+                "hint": "与上行组成不对称随机区间。默认 3600 = 最多延后 60 分钟",
+                "type": "int",
+                "slider": {
+                    "min": 0,
+                    "max": 7200,
+                    "step": 60
+                },
+                "default": 3600
             },
             "like_num": {
                 "description": "【补丁】每轮最多点赞多少条动态",

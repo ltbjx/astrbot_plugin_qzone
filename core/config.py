@@ -152,6 +152,10 @@ class TriggerConfig(ConfigNode):
     """自动点赞任务的基准触发时间（Cron: 分 时 日 月 周）"""
     like_offset: int
     """自动点赞时间偏移（秒），围绕基准时间随机 ±N 秒"""
+    like_offset_min: int
+    """自动点赞随机偏移下限（秒，可为负数）。与 like_offset_max 组成不对称区间"""
+    like_offset_max: int
+    """自动点赞随机偏移上限（秒，可为正数）"""
     like_num: int
     """自动点赞每轮最多处理多少条动态"""
     like_delay_min: int
@@ -173,6 +177,8 @@ class PluginConfig(ConfigNode):
     # ===== 本地补丁新增：手工 Cookie（不依赖 NapCat / 不登录 QQ 客户端）=====
     qzone_cookie: str
     """手工填写的 QQ空间 Cookie（含 p_skey）。填了就优先用它，服务器无需登录 QQ"""
+    qzone_cookie_file: str
+    """Cookie 文件路径。文件存在时优先于 qzone_cookie，供 Cookie 保活服务自动刷新"""
 
     _DB_VERSION = 5
     _plugin_name = "astrbot_plugin_qzone"

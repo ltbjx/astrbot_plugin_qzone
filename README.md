@@ -33,6 +33,12 @@ _✨ [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的 QQ空间对接插件 
   服务器上**不需要 NapCat、不需要扫码登录 QQ**。只需从浏览器复制一次 QQ空间 Cookie，插件直接调空间接口。
   → 不会像 NapCat 那样以「电脑端」身份登录，**不会把你本机 / 手机上的 QQ 挤下线**。
 
+- ♻️ **Cookie 自动保活（`keeper/`）**
+  Cookie 是会话级的，闲置后会失效（实测最短约 2.5 小时就报「登录失效」）。
+  `keeper/` 是一个常驻侧车服务：服务器上跑一个真实 Chromium，**手机扫码一次**，
+  之后每 10 分钟访问空间保活，并把最新 Cookie 原子写入文件，插件自动读取 —— **从此不用人工换 Cookie**。
+  依旧不登录 QQ 客户端，不影响你电脑 / 手机上的 QQ。详见 [keeper/README.md](keeper/README.md)。
+
 - 👍 **只点赞不评论模式（`like_only`）**
   上游的自动点赞**挂在自动评论任务里**：会先用 LLM 给好友动态挨个评论，评论失败还会跳过点赞。
   开启后走独立的 `AutoLike` 任务：**只点赞、不评论、不调 LLM**，并带**本地去重**（不会重复点同一条）与**随机间隔**（防风控）。
@@ -125,6 +131,7 @@ python3 tools/qzone_check.py --like-latest   # 点赞最新一条并自动回查
 | 配置项 | 类型 | 默认 | 说明 |
 |---|---|---|---|
 | `qzone_cookie` | text | 空 | 手工 QQ空间 Cookie。**填了就优先用它**，服务器无需登录 QQ |
+| `qzone_cookie_file` | string | 空 | Cookie 文件路径。**优先级高于 `qzone_cookie`**，配合 [keeper](keeper/README.md) 实现自动续期 |
 | `trigger.like_only` | bool | `true` | 只点赞不评论。开启后 `AutoComment` 自动跳过，点赞交给 `AutoLike` |
 | `trigger.like_cron` | string | `0 */2 * * *` | 自动点赞的基准时间（Cron）。**留空 = 关闭自动点赞** |
 | `trigger.like_offset` | int | `900` | 围绕基准时间随机前后浮动的秒数（打散时间特征） |
@@ -183,6 +190,7 @@ astrbot_plugin_qzone/
 │   │   └── model.py            # 请求上下文（本 Fork 支持 Cookie 字段透传）
 │   └── ...
 ├── docs/                       # 完整文档
+├── keeper/                     # Cookie 保活侧车服务（常驻浏览器，自动续期 Cookie）
 ├── tools/qzone_check.py        # 点赞状态自查工具
 └── pages/dashboard/            # 面板前端页面
 ```
