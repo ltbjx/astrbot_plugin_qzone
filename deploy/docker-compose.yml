@@ -4,7 +4,7 @@
 #   mkdir -p /opt/qzone-bot/astrbot/data/plugins && cd /opt/qzone-bot
 #   cp <此文件> docker-compose.yml
 #   docker compose up -d
-#   cd astrbot/data/plugins && git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
+#   cd astrbot/data/plugins && git clone https://github.com/ltbjx/astrbot_plugin_qzone
 #   docker exec astrbot pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
 #       Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0"
 #   docker restart astrbot

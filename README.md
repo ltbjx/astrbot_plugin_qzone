@@ -77,7 +77,7 @@ _✨ [AstrBot](https://github.com/AstrBotDevs/AstrBot) 的 QQ空间对接插件 
 
 ```bash
 cd /AstrBot/data/plugins
-git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
+git clone https://github.com/ltbjx/astrbot_plugin_qzone
 
 # 安装依赖（国内建议走清华源）
 pip install -r astrbot_plugin_qzone/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple

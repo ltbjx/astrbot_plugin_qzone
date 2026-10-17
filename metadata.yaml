@@ -3,5 +3,5 @@ display_name: QQ空间
 desc: QQ空间对接插件（Fork）：修复点赞静默失效、支持纯 Cookie 模式免登录 QQ、可只点赞不评论
 help: 详见 README.md 与 docs/ 目录
 version: v3.2.0
-author: Zhalslar（上游） / YOUR_GITHUB_USERNAME（本 Fork）
-repo: https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
+author: Zhalslar（上游） / ltbjx（本 Fork）
+repo: https://github.com/ltbjx/astrbot_plugin_qzone

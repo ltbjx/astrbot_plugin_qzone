@@ -228,7 +228,7 @@ index a74572b..f62cfd5 100644
 -# 克隆仓库到插件目录
  cd /AstrBot/data/plugins
 -git clone https://github.com/Zhalslar/astrbot_plugin_qzone
-+git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
++git clone https://github.com/ltbjx/astrbot_plugin_qzone
  
 -# 控制台重启AstrBot
 +# 安装依赖（国内建议走清华源）
@@ -885,7 +885,7 @@ index 0000000..a456d66
 +#   mkdir -p /opt/qzone-bot/astrbot/data/plugins && cd /opt/qzone-bot
 +#   cp <此文件> docker-compose.yml
 +#   docker compose up -d
-+#   cd astrbot/data/plugins && git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
++#   cd astrbot/data/plugins && git clone https://github.com/ltbjx/astrbot_plugin_qzone
 +#   docker exec astrbot pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
 +#       Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0"
 +#   docker restart astrbot
@@ -977,7 +977,7 @@ index 0000000..3802722
 +
 +```bash
 +cd /AstrBot/data/plugins
-+git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
++git clone https://github.com/ltbjx/astrbot_plugin_qzone
 +```
 +
 +装完重启 AstrBot。若日志出现：
@@ -1989,7 +1989,7 @@ index 0000000..846ccef
 +
 +```bash
 +cd /opt/qzone-bot/astrbot/data/plugins
-+git clone https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
++git clone https://github.com/ltbjx/astrbot_plugin_qzone
 +
 +docker exec astrbot pip install -i https://pypi.tuna.tsinghua.edu.cn/simple \
 +    Pillow json5 "apilmoji[tqdm]>=0.3.0,<1.0.0"
@@ -2227,8 +2227,8 @@ index 17a21df..4eb4afe 100644
 +desc: QQ空间对接插件（Fork）：修复点赞静默失效、支持纯 Cookie 模式免登录 QQ、可只点赞不评论
 +help: 详见 README.md 与 docs/ 目录
 +version: v3.2.0
-+author: Zhalslar（上游） / YOUR_GITHUB_USERNAME（本 Fork）
-+repo: https://github.com/YOUR_GITHUB_USERNAME/astrbot_plugin_qzone
++author: Zhalslar（上游） / ltbjx（本 Fork）
++repo: https://github.com/ltbjx/astrbot_plugin_qzone
 diff --git a/tests/test_qzone_check.py b/tests/test_qzone_check.py
 new file mode 100644
 index 0000000..3a2b5c7
