@@ -291,6 +291,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "where": where, "lines": lines})
             return
 
+        if path == "/api/blacklist":
+            self._json({"ok": True, "users": panel_mod.list_blacklist()})
+            return
+
         if path == "/api/devices":
             self._json({"ok": True, "devices": panel_mod.list_devices()})
             return
@@ -392,6 +396,24 @@ class Handler(BaseHTTPRequestHandler):
                 enabled = True
             ok, msg = panel_mod.set_auto(enabled)
             self._json({"ok": ok, "message": msg, "auto": panel_mod.auto_enabled()})
+            return
+
+        if path == "/api/blacklist":
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                payload = {}
+            ok, msg = panel_mod.add_blacklist(payload.get("uin"))
+            self._json({"ok": ok, "message": msg, "users": panel_mod.list_blacklist()})
+            return
+
+        if path == "/api/blacklist/remove":
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                payload = {}
+            ok, msg = panel_mod.remove_blacklist(payload.get("uin"))
+            self._json({"ok": ok, "message": msg, "users": panel_mod.list_blacklist()})
             return
 
         if path == "/api/devices/revoke":

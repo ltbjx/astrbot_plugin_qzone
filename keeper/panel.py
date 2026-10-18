@@ -723,3 +723,81 @@ def forget_device(token: str | None) -> None:
                 _save_devices()
                 record_action("设备", f"退出登录，已移除信任：{rec.get('label')}")
                 break
+
+
+# --------------------------------------------------------------------------- #
+# 点赞黑名单：名单里的 QQ 发动态一律不点赞
+# 存成 plugin_data 下的 like_blacklist.json，插件每轮读取，控制台改完立即生效
+# --------------------------------------------------------------------------- #
+BLACKLIST_FILE = OUT_DIR / "like_blacklist.json"
+POSTS_DB = OUT_DIR / "posts_5.db"
+
+
+def _nickname_of(uin: str) -> str:
+    """从插件自己的说说库里查最近一次用过的昵称，方便辨认"""
+    try:
+        import sqlite3
+
+        if not POSTS_DB.is_file():
+            return ""
+        con = sqlite3.connect(f"file:{POSTS_DB}?immutable=1", uri=True)
+        row = con.execute(
+            "SELECT name FROM posts WHERE uin = ? ORDER BY create_time DESC LIMIT 1",
+            (int(uin),),
+        ).fetchone()
+        con.close()
+        return (row[0] or "") if row else ""
+    except Exception:
+        return ""
+
+
+def list_blacklist() -> list[dict]:
+    try:
+        raw = json.loads(BLACKLIST_FILE.read_text(encoding="utf-8")) if BLACKLIST_FILE.is_file() else []
+    except Exception:
+        raw = []
+    out = []
+    for uin in raw:
+        uin = str(uin).strip()
+        if not uin:
+            continue
+        out.append({"uin": uin, "nickname": _nickname_of(uin)})
+    return out
+
+
+def _write_blacklist(uins: list[str]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = BLACKLIST_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(uins, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(BLACKLIST_FILE)
+
+
+def add_blacklist(uin: str) -> tuple[bool, str]:
+    uin = str(uin or "").strip()
+    if not uin.isdigit() or len(uin) < 5:
+        return False, "请填正确的 QQ 号（纯数字）"
+    cur = [x["uin"] for x in list_blacklist()]
+    if uin in cur:
+        return False, f"{uin} 已经在黑名单里了"
+    cur.append(uin)
+    try:
+        _write_blacklist(cur)
+    except Exception as e:
+        return False, f"写入失败：{e}"
+    nick = _nickname_of(uin)
+    record_action("黑名单", f"加入 {uin}{('（' + nick + '）') if nick else ''}")
+    return True, f"已加入黑名单：{uin}" + (f"（{nick}）" if nick else "")
+
+
+def remove_blacklist(uin: str) -> tuple[bool, str]:
+    uin = str(uin or "").strip()
+    cur = [x["uin"] for x in list_blacklist()]
+    if uin not in cur:
+        return False, f"{uin} 不在黑名单里"
+    cur.remove(uin)
+    try:
+        _write_blacklist(cur)
+    except Exception as e:
+        return False, f"写入失败：{e}"
+    record_action("黑名单", f"移除 {uin}")
+    return True, f"已移出黑名单：{uin}"

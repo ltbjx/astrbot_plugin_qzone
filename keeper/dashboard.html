@@ -3,168 +3,356 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#eef1f8">
-<title>QZone OS · 控制台</title>
+<meta name="theme-color" content="#F2F2F7">
+<meta name="color-scheme" content="light">
+<title>QZone 控制台</title>
 <style>
-  /* ========== 浅色 OS 桌面 + 玻璃拟态 + 红蓝点缀 ========== */
-  :root{
-    --bg:#eef1f8;
-    --red:#e5484d; --red-soft:#ffe8e9;
-    --blue:#2e6bff; --blue-soft:#e6eeff;
-    --ink:#12161f; --ink-2:#5b6472; --ink-3:#8a93a3;
-    --glass:rgba(255,255,255,.62);
-    --glass-strong:rgba(255,255,255,.84);
-    --stroke:rgba(255,255,255,.78);
-    --shadow:0 8px 32px rgba(28,39,71,.10);
-    --radius:20px;
+  /* ==========================================================================
+     Apple-flavored control panel
+     · 材质分层：工具栏半透明（内容从下方透过），卡片为实心层 —— 不叠加半透明
+     · 字体：系统字体 + 按字号区分字距（大字号负字距、正文接近 0）+ 紧行高
+     · 反馈：按下即响应（pointerdown），不做等待式动画
+     · 动效：克制的临界阻尼曲线，且尊重三档辅助功能偏好
+     ========================================================================== */
+
+  :root {
+    /* 系统色（iOS/macOS 明亮色板） */
+    --blue:      #007AFF;
+    --blue-tint: #E8F1FF;
+    --red:       #FF3B30;
+    --green:     #34C759;
+    --orange:    #FF9500;
+
+    --label:      #000000;
+    --label-2:    #3C3C43;          /* 62% 不透明度的等效实色 */
+    --label-3:    #8E8E93;
+    --separator:  #E5E5EA;
+
+    --bg-grouped: #F2F2F7;          /* 分组列表背景 */
+    --bg-card:    #FFFFFF;          /* 卡片：实心层 */
+    --bg-pressed: #EFEFF4;
+
+    /* 材质 */
+    --material-bar: rgba(250, 250, 252, .72);
+    --material-edge: rgba(255, 255, 255, .65);
+
+    /* 圆角与阴影：大面越大越"厚" */
+    --r-card: 16px;
+    --r-control: 12px;
+    --r-pill: 999px;
+    --shadow-card: 0 0 0 .5px rgba(0,0,0,.04), 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.04);
+    --shadow-bar:  0 .5px 0 rgba(0,0,0,.08), 0 8px 32px rgba(0,0,0,.06);
+
+    /* 动效：Apple 常用曲线（近似临界阻尼，无过冲） */
+    --ease-out: cubic-bezier(.32, .72, 0, 1);
+    --ease-in-out: cubic-bezier(.4, 0, .2, 1);
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{margin:0;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
-       background:var(--bg);overflow-x:hidden;min-height:100vh}
-  body::before{content:"";position:fixed;inset:-20%;z-index:-2;
-    background:
-      radial-gradient(48% 42% at 12% 8%, rgba(46,107,255,.30), transparent 70%),
-      radial-gradient(46% 44% at 92% 12%, rgba(229,72,77,.26), transparent 70%),
-      radial-gradient(60% 55% at 78% 92%, rgba(46,107,255,.18), transparent 70%),
-      radial-gradient(50% 50% at 18% 96%, rgba(229,72,77,.14), transparent 70%);}
-  body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
-    background-image:radial-gradient(rgba(18,22,31,.055) 1px, transparent 1px);
-    background-size:22px 22px;
-    mask-image:linear-gradient(#000, transparent 65%);-webkit-mask-image:linear-gradient(#000, transparent 65%);}
 
-  /* 顶部菜单栏 */
-  .menubar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;
-    padding:10px 18px;margin:0 auto;max-width:1180px;
-    backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);
-    background:var(--glass);border-bottom:1px solid rgba(255,255,255,.7);}
-  .menubar .spacer{flex:1}
-  .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
-    font-size:12.5px;font-weight:600;background:rgba(255,255,255,.7);
-    border:1px solid rgba(255,255,255,.9);box-shadow:0 2px 10px rgba(28,39,71,.06);}
-  .pill .led{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
-  .pill.ok .led{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.16)}
-  .pill.warn .led{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.16)}
-  .pill.bad .led{background:var(--red);box-shadow:0 0 0 4px rgba(229,72,77,.16)}
-  .clock{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;color:var(--ink-2)}
-  .quit{font-size:12px;font-weight:600;color:var(--ink-3);text-decoration:none;padding:6px 10px;
-        border-radius:9px;border:1px solid rgba(18,22,31,.08);background:rgba(255,255,255,.6)}
-  .quit:hover{color:var(--red);border-color:rgba(229,72,77,.3)}
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
-  .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 100px}
-  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
-  .card{grid-column:span 12;position:relative;padding:20px 22px;border-radius:var(--radius);
-    background:var(--glass);border:1px solid var(--stroke);
-    backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
-    box-shadow:var(--shadow);overflow:hidden;}
-  .card::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
-    background:linear-gradient(160deg, rgba(255,255,255,.55), transparent 42%);opacity:.75;}
-  .card > *{position:relative;z-index:1}
-  .card h2{margin:0 0 14px;font-size:11.5px;font-weight:700;letter-spacing:1.4px;
-    text-transform:uppercase;color:var(--ink-3);display:flex;align-items:center;gap:8px}
-  .card h2::before{content:"";width:14px;height:3px;border-radius:2px;
-    background:linear-gradient(90deg,var(--blue),var(--red))}
-  @media(min-width:860px){ .c6{grid-column:span 6} .c4{grid-column:span 4} .c8{grid-column:span 8} }
-
-  .hero{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
-  .time{font-size:46px;font-weight:800;letter-spacing:-1.5px;line-height:1;
-    font-variant-numeric:tabular-nums;
-    background:linear-gradient(120deg,var(--blue),#5b8cff 45%,var(--red));
-    -webkit-background-clip:text;background-clip:text;color:transparent}
-  .meta{font-size:13px;color:var(--ink-2);line-height:1.9}
-  .meta b{color:var(--ink)}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-  .chip{font-size:12px;font-weight:600;padding:5px 11px;border-radius:9px;
-    background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.95);color:var(--ink-2)}
-  .chip.blue{background:var(--blue-soft);color:#1d4ed8;border-color:rgba(46,107,255,.16)}
-  .chip.red{background:var(--red-soft);color:#b42318;border-color:rgba(229,72,77,.16)}
-
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  button{font:inherit;font-size:13.5px;font-weight:600;border:0;cursor:pointer;color:#fff;
-    padding:11px 18px;border-radius:12px;transition:transform .12s,filter .18s;
-    background:linear-gradient(135deg,var(--blue),#4a7dff);box-shadow:0 6px 18px rgba(46,107,255,.28);}
-  button:hover{filter:brightness(1.06);transform:translateY(-1px)}
-  button:active{transform:translateY(0) scale(.99)}
-  button:disabled{opacity:.55;cursor:default;transform:none;filter:none}
-  button.red{background:linear-gradient(135deg,var(--red),#f26a6e);box-shadow:0 6px 18px rgba(229,72,77,.28)}
-  button.ghost{background:rgba(255,255,255,.72);color:var(--ink);
-    border:1px solid rgba(18,22,31,.08);box-shadow:0 2px 10px rgba(28,39,71,.06)}
-  button.ghost:hover{background:#fff}
-  button.mini{padding:8px 13px;font-size:12.5px;border-radius:10px}
-
-  .switch{display:inline-flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
-  .switch input{display:none}
-  .track{width:50px;height:29px;border-radius:999px;background:#d7dce6;position:relative;
-    transition:.22s;box-shadow:inset 0 1px 3px rgba(0,0,0,.12)}
-  .thumb{position:absolute;top:3px;left:3px;width:23px;height:23px;border-radius:50%;
-    background:#fff;transition:.22s;box-shadow:0 2px 6px rgba(0,0,0,.18)}
-  .switch input:checked + .track{background:linear-gradient(135deg,var(--blue),#4a7dff)}
-  .switch input:checked + .track .thumb{left:24px}
-  .switch > span:last-child{font-size:13.5px;font-weight:600}
-
-  form.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:13px}
-  label{display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:600;color:var(--ink-2)}
-  input{font:inherit;font-size:14px;color:var(--ink);background:rgba(255,255,255,.82);
-    border:1px solid rgba(18,22,31,.10);border-radius:11px;padding:11px 12px;width:100%;
-    transition:border-color .16s,box-shadow .16s;}
-  input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,107,255,.14)}
-  .hint{font-size:12px;color:var(--ink-3);margin-top:10px;line-height:1.7}
-  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
-    background:rgba(46,107,255,.09);color:#1d4ed8;padding:1px 6px;border-radius:6px}
-
-  .msg{margin-top:12px;font-size:13px;font-weight:600;min-height:19px}
-  .msg.ok{color:#0f7b45}.msg.err{color:#b42318}
-
-  .logbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
-  .seg{display:inline-flex;background:rgba(255,255,255,.7);border:1px solid rgba(18,22,31,.08);
-    border-radius:11px;padding:3px;gap:2px}
-  .seg button{background:transparent;color:var(--ink-2);box-shadow:none;padding:7px 13px;
-    border-radius:8px;font-size:12.5px}
-  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(28,39,71,.10)}
-  pre.logbox{margin:0;padding:14px 16px;border-radius:14px;max-height:360px;overflow:auto;
-    background:rgba(18,22,31,.92);color:#d6dee9;font-size:12px;line-height:1.62;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all;
-    border:1px solid rgba(255,255,255,.08)}
-  pre.logbox::-webkit-scrollbar{width:9px}
-  pre.logbox::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:9px}
-
-  .kv{display:grid;grid-template-columns:auto 1fr;gap:9px 16px;font-size:13px}
-  .kv dt{color:var(--ink-3);font-weight:600}
-  .kv dd{margin:0;color:var(--ink);font-weight:600;word-break:break-all}
-  .secret{display:inline-flex;align-items:center;gap:8px}
-  .secret .val{font-family:ui-monospace,Menlo,monospace;letter-spacing:.4px}
-  .secret .val.hide{filter:blur(5px);user-select:none}
-
-  .hidden{display:none!important}
-  /* ===== 手机版适配 ===== */
-  @media (max-width:720px){
-    html{-webkit-text-size-adjust:100%}
-    .menubar{padding:8px 12px;gap:8px}
-    .pill{padding:5px 10px;font-size:12px;gap:6px}
-    .pill .led{width:6px;height:6px}
-    .clock{font-size:12px}
-    .wrap{padding:14px 12px calc(28px + env(safe-area-inset-bottom))}
-    .grid{gap:12px}
-    .card{padding:16px 15px;border-radius:18px}
-    .card h2{margin-bottom:12px}
-    .time{font-size:34px;letter-spacing:-1px}
-    .meta{font-size:12.5px}
-    .chip{font-size:11.5px;padding:5px 9px}
-    form.grid2{grid-template-columns:1fr 1fr;gap:10px}
-    input{font-size:16px;padding:12px}        /* 16px 可避免 iOS 聚焦自动放大 */
-    button{padding:12px 16px;font-size:14px;min-height:44px}
-    .row{gap:8px}
-    .row > button{flex:1 1 0;min-width:118px}
-    .seg button{min-height:36px}
-    pre.logbox{max-height:260px;font-size:11.5px}
-    .kv{grid-template-columns:1fr;gap:0}
-    .kv dt{margin-top:10px;font-size:12px}
-    .kv dd{font-size:13px}
-        #qr{width:190px!important;height:190px!important}
+  html {
+    font: 100%/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+          system-ui, "Helvetica Neue", Arial, sans-serif;
+    font-optical-sizing: auto;
+    -webkit-text-size-adjust: 100%;
+    background: var(--bg-grouped);
   }
-  @media (max-width:380px){
-    form.grid2{grid-template-columns:1fr}
-    .time{font-size:28px}
-    .row > button{min-width:100%}
+
+  body {
+    margin: 0;
+    color: var(--label);
+    background: var(--bg-grouped);
+    min-height: 100vh;
+    /* 让内容在固定工具栏下滚动 —— 材质才读得出来 */
+    -webkit-font-smoothing: antialiased;
+    touch-action: manipulation;
+  }
+
+  /* ── 顶部工具栏：半透明材质，内容从其下方滚过 ───────────────────────── */
+  .menubar {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 20px calc(10px + 0px);
+    padding-top: calc(10px + env(safe-area-inset-top));
+    background: var(--material-bar);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: var(--shadow-bar);
+    border-bottom: .5px solid rgba(0,0,0,.06);
+  }
+
+  /* 滚动边缘效应：不用硬分割线，用一层渐隐遮罩衔接内容与浮动工具栏 */
+  .menubar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 22px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(242,242,247,.9), rgba(242,242,247,0));
+  }
+
+  .menubar .spacer { flex: 1; }
+
+  /* 状态胶囊：药丸形 + 小圆点；文字在材质上用高对比 + 略重字重（vibrancy） */
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: var(--r-pill);
+    font-size: .8125rem; font-weight: 590; letter-spacing: .005em;
+    color: var(--label-2);
+    background: rgba(118,118,128,.12);
+    transition: background 200ms var(--ease-out), color 200ms var(--ease-out);
+    white-space: nowrap;
+  }
+  .pill .led {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--label-3);
+    transition: background 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+  }
+  .pill.ok   { color: #0B6E3B; background: rgba(52,199,89,.14); }
+  .pill.ok   .led { background: var(--green); box-shadow: 0 0 0 3px rgba(52,199,89,.18); }
+  .pill.warn { color: #8A5A00; background: rgba(255,149,0,.14); }
+  .pill.warn .led { background: var(--orange); box-shadow: 0 0 0 3px rgba(255,149,0,.18); }
+  .pill.bad  { color: #A3160C; background: rgba(255,59,48,.13); }
+  .pill.bad  .led { background: var(--red); box-shadow: 0 0 0 3px rgba(255,59,48,.18); }
+
+  .clock {
+    font-size: .8125rem; font-weight: 590;
+    color: var(--label-3);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .01em;
+  }
+
+  .quit {
+    font-size: .8125rem; font-weight: 590;
+    color: var(--blue); text-decoration: none;
+    padding: 6px 10px; margin-left: 2px; border-radius: 10px;
+    transition: background 180ms var(--ease-out), opacity 180ms var(--ease-out);
+  }
+  .quit:active { background: rgba(0,122,255,.12); }
+
+  /* ── 布局 ─────────────────────────────────────────────────────────────── */
+  .wrap { max-width: 980px; margin: 0 auto; padding: 20px 20px calc(32px + env(safe-area-inset-bottom)); }
+  .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+
+  /* 卡片 = 实心层 + 极细分隔感，不叠半透明（避免文字可读性塌陷） */
+  .card {
+    grid-column: span 12;
+    position: relative;
+    padding: 20px;
+    border-radius: var(--r-card);
+    background: var(--bg-card);
+    box-shadow: var(--shadow-card);
+    /* 进入动效：轻微上浮 + 淡入，临界阻尼、不过冲 */
+    animation: cardIn 420ms var(--ease-out) both;
+  }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+
+  /* 分组标题：13px 半粗灰字，不用全大写（Apple 分组列表风格） */
+  .card h2 {
+    margin: 0 0 14px;
+    font-size: .8125rem; font-weight: 600; letter-spacing: .02em;
+    color: var(--label-3);
+  }
+
+  @media (min-width: 820px) {
+    .c6 { grid-column: span 6 } .c4 { grid-column: span 4 } .c8 { grid-column: span 8 }
+  }
+
+  /* ── 下次执行：大字号负字距 + 紧行高（光学排版） ───────────────────── */
+  .hero { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .time {
+    font-size: clamp(2.5rem, 7vw, 3.25rem);
+    font-weight: 700;
+    line-height: 1.02;
+    letter-spacing: -.024em;       /* 字号越大字距越紧 */
+    font-variant-numeric: tabular-nums;
+    color: var(--label);
+  }
+  .meta {
+    font-size: .9375rem; line-height: 1.4;
+    color: var(--label-3);
+    letter-spacing: -.006em;
+  }
+  .meta b { color: var(--label-2); font-weight: 600; }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .chip {
+    font-size: .75rem; font-weight: 590; letter-spacing: .01em;
+    padding: 5px 10px; border-radius: 8px;
+    color: var(--label-2); background: rgba(118,118,128,.10);
+  }
+  .chip.blue { color: #0059C7; background: var(--blue-tint); }
+  .chip.red  { color: #A3160C; background: rgba(255,59,48,.10); }
+
+  /* ── 控件 ─────────────────────────────────────────────────────────────── */
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+  button {
+    -webkit-appearance: none; appearance: none;
+    font: inherit; font-size: .9375rem; font-weight: 590; letter-spacing: -.006em;
+    border: 0; cursor: pointer;
+    padding: 11px 18px; border-radius: var(--r-control);
+    color: #fff;
+    background: var(--blue);
+    transition: transform 120ms var(--ease-out), background 180ms var(--ease-out), opacity 180ms var(--ease-out);
+    will-change: transform;
+  }
+  /* 按下立即反馈（不等 click）；桌面悬停轻微提亮 */
+  button:active { transform: scale(.97); background: #0063D1; }
+  button:disabled { opacity: .38; transform: none; cursor: default; }
+
+  button.red { background: var(--red); }
+  button.red:active { background: #D92E24; }
+
+  button.ghost {
+    color: var(--label); background: rgba(118,118,128,.10);
+  }
+  button.ghost:active { background: rgba(118,118,128,.18); }
+
+  button.mini { padding: 8px 14px; font-size: .8125rem; border-radius: 10px; }
+
+  @media (hover: hover) {
+    button:hover:not(:disabled) { filter: brightness(1.04); }
+    button.ghost:hover { background: rgba(118,118,128,.14); }
+  }
+
+  /* iOS 开关：按下即有反馈，滑块用短弹簧曲线 */
+  .switch { display: inline-flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
+  .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .track {
+    position: relative; width: 51px; height: 31px; border-radius: var(--r-pill);
+    background: rgba(120,120,128,.32);
+    transition: background 240ms var(--ease-out);
+    flex: 0 0 auto;
+  }
+  .thumb {
+    position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 3px 8px rgba(0,0,0,.15), 0 1px 1px rgba(0,0,0,.16);
+    transition: transform 300ms var(--ease-out);
+  }
+  .switch input:checked + .track { background: var(--green); }
+  .switch input:checked + .track .thumb { transform: translateX(20px); }
+  .switch input:focus-visible + .track { box-shadow: 0 0 0 4px rgba(0,122,255,.35); }
+  .switch > span:last-child { font-size: .9375rem; font-weight: 500; letter-spacing: -.006em; }
+
+  /* 表单：iOS 设置风格的分组输入 */
+  form.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: 14px; }
+  label { display: flex; flex-direction: column; gap: 6px; font-size: .8125rem; font-weight: 500; color: var(--label-3); letter-spacing: .005em; }
+  input {
+    font: inherit; font-size: 1rem; letter-spacing: -.01em; color: var(--label);
+    background: #FFFFFF;
+    border: 1px solid var(--separator);
+    border-radius: 10px;
+    padding: 11px 12px; width: 100%;
+    transition: border-color 180ms var(--ease-out), box-shadow 180ms var(--ease-out);
+  }
+  input:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3.5px rgba(0,122,255,.16);
+  }
+
+  .hint { font-size: .8125rem; line-height: 1.5; color: var(--label-3); margin-top: 10px; letter-spacing: -.004em; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .9em; color: var(--label-2);
+    background: rgba(118,118,128,.12); padding: 1px 5px; border-radius: 5px;
+  }
+
+  /* 内联反馈：四种状态（状态/完成/警示/错误）用颜色 + 文字区分，不仅靠颜色 */
+  .msg { margin-top: 12px; font-size: .875rem; font-weight: 500; min-height: 20px; line-height: 1.45; }
+  .msg.ok  { color: #0B6E3B; }
+  .msg.err { color: #C0261C; }
+  .msg:empty { min-height: 0; }
+
+  /* ── 日志：深色凹槽，等宽、可滚动 ─────────────────────────────────── */
+  .logbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .seg {
+    display: inline-flex; gap: 2px; padding: 2px;
+    background: rgba(118,118,128,.12); border-radius: 9px;
+  }
+  .seg button {
+    background: transparent; color: var(--label-3);
+    font-size: .8125rem; font-weight: 590; letter-spacing: -.004em;
+    padding: 6px 12px; border-radius: 7px;
+  }
+  .seg button.on {
+    background: #FFFFFF; color: var(--label);
+    box-shadow: 0 1px 3px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.04);
+  }
+  pre.logbox {
+    margin: 0; padding: 14px 16px; border-radius: 12px;
+    max-height: 340px; overflow: auto;
+    background: #1C1C1E; color: #E5E5EA;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .75rem; line-height: 1.6; letter-spacing: 0;
+    white-space: pre-wrap; word-break: break-word;
+    -webkit-overflow-scrolling: touch;
+  }
+  pre.logbox::-webkit-scrollbar { width: 8px; height: 8px }
+  pre.logbox::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 8px }
+
+  /* ── 分组列表（服务器连接 / 信任设备）：标签左、值右，分隔线内缩 ────── */
+  .kv { margin: 0; }
+  .kv > div {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+    padding: 11px 0;
+    border-bottom: .5px solid var(--separator);
+  }
+  .kv > div:last-child { border-bottom: 0; padding-bottom: 0; }
+  .kv dt { font-size: .9375rem; color: var(--label); letter-spacing: -.006em; flex: 0 0 auto; }
+  .kv dd {
+    margin: 0; font-size: .9375rem; color: var(--label-3);
+    text-align: right; letter-spacing: -.006em; word-break: break-all;
+  }
+  .kv dd b, .kv dd code { color: var(--label-2); }
+
+  #devList > div { padding: 11px 0; border-bottom: .5px solid var(--separator); }
+  #devList > div:last-child { border-bottom: 0; }
+
+  /* 密码默认模糊，点「显示」才露出来 */
+  .secret { display: inline-flex; align-items: center; gap: 8px; }
+  .secret .val { font-family: ui-monospace, Menlo, monospace; font-size: .875rem; transition: filter 200ms var(--ease-out); }
+  .secret .val.hide { filter: blur(5px); user-select: none; }
+
+  .hidden { display: none !important; }
+
+  /* —— 手机：更大的触控热区、输入 16px 防缩放、安全区 —— */
+  @media (max-width: 720px) {
+    .menubar { padding-left: 16px; padding-right: 16px; gap: 6px; }
+    .pill { padding: 5px 10px; font-size: .75rem; }
+    .wrap { padding: 16px 16px calc(28px + env(safe-area-inset-bottom)); }
+    .grid { gap: 12px; }
+    .card { padding: 17px; border-radius: 14px; }
+    .time { font-size: 2.25rem; }
+    form.grid2 { grid-template-columns: 1fr 1fr; gap: 12px; }
+    input { font-size: 16px; }                 /* 关键：避免 iOS 聚焦时整页放大 */
+    button { padding: 12px 16px; min-height: 44px; }   /* 44pt 触控热区 */
+    .row > button { flex: 1 1 0; min-width: 120px; }
+    pre.logbox { max-height: 260px; font-size: .71875rem; }
+    .kv > div { flex-direction: column; align-items: flex-start; gap: 2px; }
+    .kv dd { text-align: left; }
+    #qr { width: 190px !important; height: 190px !important; }
+  }
+  @media (max-width: 380px) {
+    form.grid2 { grid-template-columns: 1fr; }
+    .time { font-size: 1.9rem; }
+    .row > button { min-width: 100%; }
+  }
+
+  /* ── 辅助功能：三档独立降级 ───────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; }
+    * { transition-duration: 1ms !important; }
+    button:active { transform: none; }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .menubar { background: #FFFFFF; -webkit-backdrop-filter: none; backdrop-filter: none; }
+    .menubar::after { display: none; }
+  }
+  @media (prefers-contrast: more) {
+    .card { box-shadow: 0 0 0 1px var(--label-3); }
+    .menubar { background: #FFFFFF; border-bottom: 1px solid var(--label-3); }
+    .chip, .pill { background: rgba(0,0,0,.08); }
+    .hint, .meta, .kv dd { color: var(--label-2); }
   }
 </style>
 </head>
@@ -176,7 +364,7 @@
   <span class="pill" id="pillAuto"><span class="led"></span><span id="autoText">自动点赞</span></span>
   <div class="spacer"></div>
   <span class="clock" id="clock">--:--:--</span>
-  <a href="/logout" class="quit" title="退出登录">退出</a>
+  <a href="/logout" class="quit">退出</a>
 </div>
 
 <div class="wrap">
@@ -194,25 +382,25 @@
     <section class="card c4">
       <h2>快捷操作</h2>
       <div class="row">
-        <button id="btnLike">⚡ 立即点赞</button>
-        <button id="btnRestart" class="red">⟳ 重启机器人</button>
+        <button id="btnLike">立即点赞</button>
+        <button id="btnRestart" class="red">重启机器人</button>
       </div>
       <div class="row" style="margin-top:10px">
-        <button class="ghost mini" id="btnTestCookie">🍪 测 Cookie</button>
-        <button class="ghost mini" id="btnClearDedup">🧹 清去重</button>
+        <button class="ghost mini" id="btnTestCookie">测 Cookie</button>
+        <button class="ghost mini" id="btnClearDedup">清去重</button>
       </div>
       <div class="msg" id="actMsg"></div>
       <pre class="logbox hidden" id="testOut" style="max-height:150px;margin-top:10px"></pre>
     </section>
 
     <section class="card c4">
-      <h2>自动点赞开关</h2>
+      <h2>自动点赞</h2>
       <label class="switch">
         <input type="checkbox" id="autoSwitch">
         <span class="track"><span class="thumb"></span></span>
         <span id="autoLabel">读取中…</span>
       </label>
-      <div class="hint">关闭后仍保留原周期，再次打开会自动恢复。「立即点赞」不受开关影响。</div>
+      <div class="hint">关闭后保留原周期，再次打开自动恢复。「立即点赞」不受开关影响。</div>
     </section>
 
     <section class="card c8">
@@ -226,7 +414,7 @@
         <label>点赞最大间隔（秒）<input id="dMax" type="number" min="0" max="600" value="20"></label>
       </form>
       <div class="row" style="margin-top:14px">
-        <button id="btnSave">💾 保存并生效</button>
+        <button id="btnSave">保存并生效</button>
         <span class="hint" style="margin:0">Cron 留空 = 关闭自动点赞</span>
       </div>
       <div class="msg" id="saveMsg"></div>
@@ -235,34 +423,45 @@
     <section class="card c6">
       <h2>服务器连接</h2>
       <dl class="kv">
-        <dt>地址</dt><dd id="srvHost">-</dd>
-        <dt>SSH</dt><dd id="srvSsh">-</dd>
-        <dt>SSH 密码</dt><dd id="srvPass">-</dd>
-        <dt>控制台</dt><dd id="srvPanel">-</dd>
-        <dt>Cookie</dt><dd id="srvCookie">-</dd>
-        <dt>去重库</dt><dd id="srvDedup">-</dd>
+        <div><dt>地址</dt><dd id="srvHost">-</dd></div>
+        <div><dt>SSH</dt><dd id="srvSsh">-</dd></div>
+        <div><dt>SSH 密码</dt><dd id="srvPass">-</dd></div>
+        <div><dt>控制台</dt><dd id="srvPanel">-</dd></div>
+        <div><dt>Cookie</dt><dd id="srvCookie">-</dd></div>
+        <div><dt>去重库</dt><dd id="srvDedup">-</dd></div>
       </dl>
-      <div class="row" style="margin-top:14px">
-        <a id="btnTerminal" class="hidden" href="#" target="_blank" rel="noopener"><button class="ghost">🖥 打开网页终端</button></a>
+      <div class="row" style="margin-top:16px">
+        <a id="btnTerminal" class="hidden" href="#" target="_blank" rel="noopener"><button class="ghost">打开网页终端</button></a>
       </div>
       <div class="hint">网页终端需先在服务器装好 ttyd（见 keeper/README.md）。</div>
+    </section>
+
+    <section class="card c6">
+      <h2>点赞黑名单</h2>
+      <div id="blList" class="hint" style="margin:0">加载中…</div>
+      <div class="row" style="margin-top:14px">
+        <input id="blInput" type="text" inputmode="numeric" autocomplete="off"
+               placeholder="QQ 号" style="max-width:170px">
+        <button class="ghost mini" id="btnBlAdd">加入黑名单</button>
+      </div>
+      <div class="hint">名单里的 QQ 发动态时不会被点赞。可填 QQ 号，加完能看到最近用过的昵称。</div>
+    </section>
+
+    <section class="card c6">
+      <h2>信任设备</h2>
+      <div id="devList" class="hint" style="margin:0">加载中…</div>
+      <div class="hint">在这些设备上输对过密码，之后打开面板自动进入。发现陌生设备就点「撤销」。</div>
     </section>
 
     <section class="card c6 hidden" id="qrCard">
       <h2>扫码登录</h2>
       <div class="row" style="align-items:flex-start;gap:18px">
         <img id="qr" src="/qr.png" alt="二维码"
-             style="width:220px;height:220px;image-rendering:pixelated;background:#fff;border-radius:14px;padding:10px;box-shadow:0 6px 20px rgba(28,39,71,.12)">
+             style="width:220px;height:220px;image-rendering:pixelated;background:#fff;border-radius:12px;box-shadow:0 0 0 .5px rgba(0,0,0,.06), 0 6px 20px rgba(0,0,0,.08)">
         <div class="hint" style="margin:0;max-width:220px">
           手机 QQ 扫码登录 <b>空间网页版</b>（不是 QQ 客户端，不影响你电脑/手机上的 QQ）。<br><br>二维码每 30 秒自动刷新。
         </div>
       </div>
-    </section>
-
-    <section class="card c6">
-      <h2>信任设备</h2>
-      <div id="devList" class="hint" style="margin:0">加载中…</div>
-      <div class="hint">在这些设备上输对过密码，之后打开面板<b>自动进入</b>，不用再输密码。发现陌生设备就点「撤销」。</div>
     </section>
 
     <section class="card">
@@ -272,15 +471,14 @@
           <button id="segTail" class="on">最新</button>
           <button id="segHead">启动日志 · 操作记录</button>
         </div>
-        <button class="ghost mini" id="btnRefresh">🔄 刷新</button>
-        <button class="ghost mini" id="btnPause">⏸ 暂停</button>
+        <button class="ghost mini" id="btnRefresh">刷新</button>
+        <button class="ghost mini" id="btnPause">暂停</button>
       </div>
       <pre class="logbox" id="logs">加载中…</pre>
     </section>
 
   </div>
 </div>
-
 
 <script>
 const $ = id => document.getElementById(id);
@@ -343,7 +541,7 @@ async function loadState(){
         `<span class="chip blue">基准 ${n.base ? n.base.slice(11,16) : '-'}</span>` +
         `<span class="chip ${off>0?'red':'blue'}">偏移 ${off>0?'+':''}${off} 分钟</span>` +
         `<span class="chip">周期 <code>${n.cron || '-'}</code></span>` +
-        `<span class="chip">登录 ${ok?'✅':'⏳'}</span>`;
+        `<span class="chip ${ok?'blue':'red'}">${ok?'已登录':'待扫码'}</span>`;
     }else{
       nextTs = 0;
       $('nextTime').textContent = autoOn ? '--:--' : '已关闭';
@@ -442,12 +640,12 @@ const doRestart = async () => {
         const s = await (await fetch('/api/state', {cache:'no-store'})).json();
         const st = (s.bot || {}).status || '';
         if(st === 'running'){
-          act(`✅ 已重启并恢复运行（约 ${i*2} 秒）`, 'ok');
+          act(`已重启并恢复运行（约 ${i*2} 秒）`, 'ok');
           break;
         }
-        act(`重启中… 等待容器恢复（${i*2} 秒）`);
+        act(`重启中，等待容器恢复（${i*2} 秒）`);
       }catch(e){
-        act(`重启中… 面板暂无响应（${i*2} 秒）`);
+        act(`重启中，面板暂无响应（${i*2} 秒）`);
       }
     }
   }
@@ -512,7 +710,7 @@ $('segHead').onclick = () => { logWhere='head'; $('segHead').classList.add('on')
 $('btnRefresh').onclick = () => { loadState(); loadLogs(); };
 $('btnPause').onclick = () => {
   paused = !paused;
-  $('btnPause').textContent = paused ? '▶️ 继续' : '⏸ 暂停';
+  $('btnPause').textContent = paused ? '继续' : '暂停';
 };
 
 
@@ -521,17 +719,18 @@ async function loadDevices(){
     const d = await (await fetch('/api/devices', {cache:'no-store'})).json();
     const list = d.devices || [];
     const box = $('devList');
-    if(!list.length){ box.innerHTML = '还没有信任设备'; return; }
+    if(!list.length){ box.innerHTML = '<span style="color:var(--label-3)">还没有信任设备</span>'; return; }
     box.innerHTML = list.map(v => `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;
-                  padding:9px 0;border-bottom:1px solid rgba(18,22,31,.06)">
-        <div>
-          <div style="font-weight:600;font-size:13px">${v.label || '未知设备'}</div>
-          <div style="font-size:11.5px;color:var(--ink-3)">
-            上次使用 ${v.last_seen || '-'} ｜ 添加于 ${v.created_at || '-'} ｜ 到期 ${v.expires || '-'}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div style="min-width:0">
+          <div style="font-size:.9375rem;font-weight:500;letter-spacing:-.006em;color:var(--label)">
+            ${v.label || '未知设备'}
+          </div>
+          <div style="font-size:.75rem;color:var(--label-3);margin-top:2px;letter-spacing:-.004em">
+            上次 ${v.last_seen || '-'} · 添加于 ${v.created_at || '-'} · 到期 ${v.expires || '-'}
           </div>
         </div>
-        <button class="ghost mini" onclick="revokeDev('${v.id}')">撤销</button>
+        <button class="ghost mini" style="flex:0 0 auto" onclick="revokeDev('${v.id}')">撤销</button>
       </div>`).join('');
   }catch(e){ $('devList').textContent = '读取失败'; }
 }
@@ -545,9 +744,56 @@ async function revokeDev(id){
   }catch(e){ act('撤销失败：'+e, 'err'); }
 }
 
-loadState(); loadLogs(); loadDevices();
+async function loadBlacklist(){
+  try{
+    const d = await (await fetch('/api/blacklist', {cache:'no-store'})).json();
+    const list = d.users || [];
+    const box = $('blList');
+    if(!list.length){
+      box.innerHTML = '<span style="color:var(--label-3)">名单为空 —— 所有好友的动态都会点赞</span>';
+      return;
+    }
+    box.innerHTML = list.map(u => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div style="min-width:0">
+          <div style="font-size:.9375rem;font-weight:500;letter-spacing:-.006em;color:var(--label)">
+            ${u.nickname || '未知昵称'}
+          </div>
+          <div style="font-size:.75rem;color:var(--label-3);margin-top:2px;letter-spacing:-.004em">
+            ${u.uin}
+          </div>
+        </div>
+        <button class="ghost mini" style="flex:0 0 auto" onclick="removeBl('${u.uin}')">移出</button>
+      </div>`).join('');
+  }catch(e){ $('blList').textContent = '读取失败'; }
+}
+
+async function addBl(){
+  const inp = $('blInput');
+  const uin = (inp.value || '').trim();
+  if(!uin){ act('请先填 QQ 号', 'err'); return; }
+  try{
+    const r = await post('/api/blacklist', {uin});
+    act(r.message, r.ok ? 'ok' : 'err');
+    if(r.ok){ inp.value = ''; loadBlacklist(); }
+  }catch(e){ act('添加失败：' + e, 'err'); }
+}
+
+async function removeBl(uin){
+  try{
+    const r = await post('/api/blacklist/remove', {uin});
+    act(r.message, r.ok ? 'ok' : 'err');
+    loadBlacklist();
+  }catch(e){ act('移除失败：' + e, 'err'); }
+}
+
+$('btnBlAdd').onclick = addBl;
+$('blInput').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); addBl(); } });
+
+loadState(); loadLogs(); loadDevices(); loadBlacklist();
 setInterval(loadState, 5000);
 setInterval(loadDevices, 30000);
+setInterval(loadBlacklist, 30000);
 setInterval(loadLogs, 5000);
 </script>
 </body>

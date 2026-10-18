@@ -272,6 +272,8 @@ class AutoLike(AutoRandomCronTask):
         self.sender = sender
         self._store_path = Path(config.data_dir) / "liked_tids.json"
         self._liked: list[str] = self._load_liked()
+        # 本地补丁：点赞黑名单（这些 QQ 发的动态一律不点赞）
+        self._blacklist_path = Path(config.data_dir) / "like_blacklist.json"
 
     def _load_liked(self) -> list[str]:
         try:
@@ -294,11 +296,25 @@ class AutoLike(AutoRandomCronTask):
         except Exception as e:
             logger.warning(f"[AutoLike] 已点赞记录写入失败：{e}")
 
+    def _load_blacklist(self) -> set[str]:
+        """读取点赞黑名单（QQ 号集合）。每轮都重读，控制台改完立即生效。"""
+        try:
+            if self._blacklist_path.exists():
+                data = json.loads(self._blacklist_path.read_text(encoding="utf-8"))
+                if isinstance(data, list):
+                    return {str(x).strip() for x in data if str(x).strip()}
+                if isinstance(data, dict):
+                    return {str(x).strip() for x in data if str(x).strip()}
+        except Exception as e:
+            logger.warning(f"[AutoLike] 黑名单读取失败，本轮不启用：{e}")
+        return set()
+
     async def do_task(self):
         # 本地补丁（重要）：每轮开始都从磁盘重新读取去重库。
         # 否则在控制台「清空去重」后，内存里仍是旧名单，会一直跳过所有动态
         # —— 表现为"清空了去重、点了立即点赞，却一个都没重新检测"。
         self._liked = self._load_liked()
+        blacklist = self._load_blacklist()
 
         num = max(int(self.cfg.trigger.like_num or 20), 1)
         delay_min = max(int(self.cfg.trigger.like_delay_min or 0), 0)
@@ -309,8 +325,16 @@ class AutoLike(AutoRandomCronTask):
 
         liked = 0
         skipped = 0
+        blocked = 0
         for post in posts:
             if not post.tid:
+                continue
+            # 黑名单：这些人的动态一律不点赞
+            if str(post.uin) in blacklist:
+                blocked += 1
+                logger.info(
+                    f"[AutoLike] 命中黑名单，跳过 uin={post.uin} 昵称={post.name}"
+                )
                 continue
             if post.tid in self._liked:
                 skipped += 1
@@ -331,5 +355,6 @@ class AutoLike(AutoRandomCronTask):
 
         logger.info(
             f"[AutoLike] 本轮检查 {len(posts)} 条动态，新点赞 {liked} 条，"
-            f"跳过已赞 {skipped} 条，去重库共 {len(self._liked)} 条"
+            f"跳过已赞 {skipped} 条，黑名单跳过 {blocked} 条，"
+            f"去重库共 {len(self._liked)} 条"
         )
