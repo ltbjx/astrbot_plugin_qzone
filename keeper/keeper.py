@@ -291,6 +291,57 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "where": where, "lines": lines})
             return
 
+        if path == "/api/posts":
+            try:
+                n = int(self._query("n", "5"))
+            except ValueError:
+                n = 5
+            self._json(panel_mod.fetch_posts(n))
+            return
+
+        if path == "/api/llm-config":
+            self._json({"ok": True, "llm": panel_mod.get_llm_config()})
+            return
+
+        if path == "/api/post-action":
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                payload = {}
+            action = str(payload.get("action") or "")
+            if action not in ("like", "unlike", "comment", "uncomment"):
+                self._json({"ok": False, "message": f"不支持的操作：{action}"}, 400)
+                return
+            self._json(panel_mod.post_action(action, payload))
+            return
+
+        if path == "/api/reschedule":
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                payload = {}
+            try:
+                minutes = float(payload.get("minutes") or 0)
+            except (TypeError, ValueError):
+                self._json({"ok": False, "message": "分钟数不合法"}, 400)
+                return
+            self._json(panel_mod.reschedule(minutes))
+            return
+
+        if path == "/api/llm-config":
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                payload = {}
+            ok, msg = panel_mod.save_llm_config(payload)
+            self._json({"ok": ok, "message": msg, "llm": panel_mod.get_llm_config()})
+            return
+
+        if path == "/api/llm-test":
+            ok, msg = panel_mod.test_llm_config()
+            self._json({"ok": ok, "message": msg})
+            return
+
         if path == "/api/blacklist":
             self._json({"ok": True, "users": panel_mod.list_blacklist()})
             return
@@ -396,6 +447,57 @@ class Handler(BaseHTTPRequestHandler):
                 enabled = True
             ok, msg = panel_mod.set_auto(enabled)
             self._json({"ok": ok, "message": msg, "auto": panel_mod.auto_enabled()})
+            return
+
+        if path == "/api/posts":
+            try:
+                n = int(self._query("n", "5"))
+            except ValueError:
+                n = 5
+            self._json(panel_mod.fetch_posts(n))
+            return
+
+        if path == "/api/llm-config":
+            self._json({"ok": True, "llm": panel_mod.get_llm_config()})
+            return
+
+        if path == "/api/post-action":
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                payload = {}
+            action = str(payload.get("action") or "")
+            if action not in ("like", "unlike", "comment", "uncomment"):
+                self._json({"ok": False, "message": f"不支持的操作：{action}"}, 400)
+                return
+            self._json(panel_mod.post_action(action, payload))
+            return
+
+        if path == "/api/reschedule":
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                payload = {}
+            try:
+                minutes = float(payload.get("minutes") or 0)
+            except (TypeError, ValueError):
+                self._json({"ok": False, "message": "分钟数不合法"}, 400)
+                return
+            self._json(panel_mod.reschedule(minutes))
+            return
+
+        if path == "/api/llm-config":
+            try:
+                payload = json.loads(raw.decode("utf-8") or "{}")
+            except Exception:
+                payload = {}
+            ok, msg = panel_mod.save_llm_config(payload)
+            self._json({"ok": ok, "message": msg, "llm": panel_mod.get_llm_config()})
+            return
+
+        if path == "/api/llm-test":
+            ok, msg = panel_mod.test_llm_config()
+            self._json({"ok": ok, "message": msg})
             return
 
         if path == "/api/blacklist":

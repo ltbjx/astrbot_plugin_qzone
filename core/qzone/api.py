@@ -23,6 +23,8 @@ class QzoneAPI(QzoneHttpClient):
     UPLOAD_IMAGE_URL = "https://up.qzone.qq.com/cgi-bin/upload/cgi_upload_image"
     EMOTION_URL = "https://user.qzone.qq.com/proxy/domain/taotao.qzone.qq.com/cgi-bin/emotion_cgi_publish_v6"
     DOLIKE_URL = "https://user.qzone.qq.com/proxy/domain/w.qzone.qq.com/cgi-bin/likes/internal_dolike_app"
+    # 本地补丁：取消点赞走配对 CGI internal_unlike_app（参数与点赞一致，实测有效）
+    UNLIKE_URL = "https://user.qzone.qq.com/proxy/domain/w.qzone.qq.com/cgi-bin/likes/internal_unlike_app"
     LIST_URL = "https://user.qzone.qq.com/proxy/domain/taotao.qq.com/cgi-bin/emotion_cgi_msglist_v6"
     COMMENT_URL = "https://user.qzone.qq.com/proxy/domain/taotao.qzone.qq.com/cgi-bin/emotion_cgi_re_feeds"
     ZONE_LIST_URL = "https://user.qzone.qq.com/proxy/domain/ic2.qzone.qq.com/cgi-bin/feeds/feeds3_html_more"
@@ -153,6 +155,35 @@ class QzoneAPI(QzoneHttpClient):
         )
         return ApiResponse.from_raw(raw)
 
+    async def unlike(self, post: Post) -> ApiResponse:
+        """取消点赞指定说说"""
+        ctx = await self.session.get_ctx()
+        key_base = (
+            self.BASE_URL_HTTP
+            if getattr(self.cfg.trigger, "like_use_http_key", False)
+            else self.BASE_URL
+        )
+        raw = await self.request(
+            "POST",
+            self.UNLIKE_URL,
+            params={"g_tk": ctx.gtk2},
+            data={
+                "qzreferrer": f"{self.BASE_URL}/{ctx.uin}",
+                "opuin": ctx.uin,
+                "unikey": f"{key_base}/{post.uin}/mood/{post.tid}",
+                "curkey": f"{key_base}/{post.uin}/mood/{post.tid}",
+                "appid": 311,
+                "from": 1,
+                "typeid": 0,
+                "abstime": int(time.time()),
+                "fid": post.tid,
+                "active": 0,
+                "format": "json",
+                "fupdate": 1,
+            },
+        )
+        return ApiResponse.from_raw(raw)
+
     async def comment(self, post: Post, content: str) -> ApiResponse:
         """
         评论指定说说
@@ -223,6 +254,26 @@ class QzoneAPI(QzoneHttpClient):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
                 "Referer": "https://user.qzone.qq.com/",
                 "Origin": "https://user.qzone.qq.com",
+            },
+        )
+        return ApiResponse.from_raw(raw)
+
+    async def delete_comment(self, post: Post, comment_id: int | str) -> ApiResponse:
+        """删除自己在某条说说下的评论（本地补丁，实测可用）"""
+        ctx = await self.session.get_ctx()
+        raw = await self.request(
+            "POST",
+            "https://h5.qzone.qq.com/proxy/domain/taotao.qq.com/cgi-bin/emotion_cgi_delcomment_ugc",
+            params={"g_tk": ctx.gtk2},
+            data={
+                "uin": ctx.uin,
+                "topicId": f"{post.uin}_{post.tid}__1",
+                "commentId": comment_id,
+                "feedsKey": post.tid,
+                "feedsType": 100,
+                "hostUin": post.uin,
+                "format": "json",
+                "qzreferrer": f"{self.BASE_URL}/{ctx.uin}",
             },
         )
         return ApiResponse.from_raw(raw)

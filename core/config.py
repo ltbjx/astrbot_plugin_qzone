@@ -120,6 +120,13 @@ class LLMConfig(ConfigNode):
     comment_prompt: str
     reply_provider_id: str
     reply_prompt: str
+    # 本地补丁：直连 OpenAI 兼容接口（控制台里填 Key/模型即可，不依赖 AstrBot 的 provider 配置）
+    api_base: str
+    """接口地址，如 https://api.deepseek.com/v1"""
+    api_key: str
+    """API Key"""
+    model: str
+    """模型名，如 deepseek-chat"""
 
 
 class SourceConfig(ConfigNode):

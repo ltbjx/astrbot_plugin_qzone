@@ -1,270 +1,288 @@
 {
-    "manage_group": {
-        "description": "管理群",
+  "manage_group": {
+    "description": "管理群",
+    "type": "string",
+    "hint": "bot收到的投稿将在管理群里审批, 不填则将审批信息私发给bot管理员"
+  },
+  "qzone_cookie": {
+    "description": "【补丁】QQ空间 Cookie（手工填写，填了就不需要登录 QQ）",
+    "type": "text",
+    "hint": "从浏览器登录 user.qzone.qq.com 后，F12 → Network → 任意 user.qzone.qq.com 请求 → 复制整行 cookie 的值粘到这里（必须包含 p_skey 和 uin）。填了这项，服务器上完全不需要 NapCat / QQ 客户端，也不会把你本机 QQ 挤下线。过期后点赞会失败，需要重新复制一次"
+  },
+  "qzone_cookie_file": {
+    "description": "【补丁】Cookie 文件路径（配合 Cookie 保活服务，优先级高于上面的手工 Cookie）",
+    "type": "string",
+    "hint": "填了之后插件会优先从这个文件读取 Cookie。配合 keeper/ 目录里的 Cookie 保活服务使用：保活服务会定时把浏览器里最新的 Cookie 写入该文件，插件自动跟上，无需重启。留空则只用上面的手工 Cookie",
+    "default": ""
+  },
+  "llm": {
+    "description": "LLM模块配置",
+    "type": "object",
+    "hint": "",
+    "items": {
+      "post_provider_id": {
+        "description": "写说说用的LLM提供商",
+        "hint": "留空或者填写的提供商不存在时, 则使用当前正在使用的LLM提供商",
         "type": "string",
-        "hint": "bot收到的投稿将在管理群里审批, 不填则将审批信息私发给bot管理员"
-    },
-    "qzone_cookie": {
-        "description": "【补丁】QQ空间 Cookie（手工填写，填了就不需要登录 QQ）",
+        "default": "",
+        "_special": "select_provider"
+      },
+      "post_prompt": {
+        "description": "写说说用的llm提示词",
         "type": "text",
-        "hint": "从浏览器登录 user.qzone.qq.com 后，F12 → Network → 任意 user.qzone.qq.com 请求 → 复制整行 cookie 的值粘到这里（必须包含 p_skey 和 uin）。填了这项，服务器上完全不需要 NapCat / QQ 客户端，也不会把你本机 QQ 挤下线。过期后点赞会失败，需要重新复制一次"
-    },
-    "qzone_cookie_file": {
-        "description": "【补丁】Cookie 文件路径（配合 Cookie 保活服务，优先级高于上面的手工 Cookie）",
+        "hint": "强烈建议自行根据Bot人格进行改写, 从而达到更好的效果",
+        "default": "## 找出一个你感兴趣的主题来写一句吐槽或感慨，注意精简"
+      },
+      "comment_provider_id": {
+        "description": "评论说说用的LLM提供商",
+        "hint": "留空或者填写的提供商不存在时, 则使用当前正在使用的LLM提供商",
         "type": "string",
-        "hint": "填了之后插件会优先从这个文件读取 Cookie。配合 keeper/ 目录里的 Cookie 保活服务使用：保活服务会定时把浏览器里最新的 Cookie 写入该文件，插件自动跟上，无需重启。留空则只用上面的手工 Cookie",
+        "default": "",
+        "_special": "select_provider"
+      },
+      "comment_prompt": {
+        "description": "评论说说用的llm提示词",
+        "type": "text",
+        "hint": "强烈建议自行根据Bot人格进行改写, 从而达到更好的效果",
+        "default": "生成一句简短、直接、贴题、犀利的评论, 不要解释、不做自我描述、不分选项"
+      },
+      "reply_provider_id": {
+        "description": "回复评论用的LLM提供商",
+        "hint": "留空或者填写的提供商不存在时, 则使用当前正在使用的LLM提供商",
+        "type": "string",
+        "default": "",
+        "_special": "select_provider"
+      },
+      "reply_prompt": {
+        "description": "回复评论用的llm提示词",
+        "type": "text",
+        "hint": "强烈建议自行根据Bot人格进行改写, 从而达到更好的效果",
+        "default": "这条帖子收到了一条评论，请回复此条评论, 不要解释、不做自我描述、不分选项"
+      },
+      "api_base": {
+        "description": "【补丁】直连模型接口地址（OpenAI 兼容）",
+        "type": "string",
+        "hint": "例如 https://api.deepseek.com/v1、https://api.openai.com/v1。填了这组配置，评论会直接调用该接口，不依赖 AstrBot 的提供商配置",
         "default": ""
-    },
-    "llm": {
-        "description": "LLM模块配置",
-        "type": "object",
-        "hint": "",
-        "items": {
-            "post_provider_id": {
-                "description": "写说说用的LLM提供商",
-                "hint": "留空或者填写的提供商不存在时, 则使用当前正在使用的LLM提供商",
-                "type": "string",
-                "default": "",
-                "_special": "select_provider"
-            },
-            "post_prompt": {
-                "description": "写说说用的llm提示词",
-                "type": "text",
-                "hint": "强烈建议自行根据Bot人格进行改写, 从而达到更好的效果",
-                "default": "## 找出一个你感兴趣的主题来写一句吐槽或感慨，注意精简"
-            },
-            "comment_provider_id": {
-                "description": "评论说说用的LLM提供商",
-                "hint": "留空或者填写的提供商不存在时, 则使用当前正在使用的LLM提供商",
-                "type": "string",
-                "default": "",
-                "_special": "select_provider"
-            },
-            "comment_prompt": {
-                "description": "评论说说用的llm提示词",
-                "type": "text",
-                "hint": "强烈建议自行根据Bot人格进行改写, 从而达到更好的效果",
-                "default": "生成一句简短、直接、贴题、犀利的评论, 不要解释、不做自我描述、不分选项"
-            },
-            "reply_provider_id": {
-                "description": "回复评论用的LLM提供商",
-                "hint": "留空或者填写的提供商不存在时, 则使用当前正在使用的LLM提供商",
-                "type": "string",
-                "default": "",
-                "_special": "select_provider"
-            },
-            "reply_prompt": {
-                "description": "回复评论用的llm提示词",
-                "type": "text",
-                "hint": "强烈建议自行根据Bot人格进行改写, 从而达到更好的效果",
-                "default": "这条帖子收到了一条评论，请回复此条评论, 不要解释、不做自我描述、不分选项"
-            }
-        }
-    },
-    "source": {
-        "description": "数据来源配置",
-        "type": "object",
-        "hint": "",
-        "items": {
-            "ignore_groups": {
-                "description": "忽略的群聊列表",
-                "hint": "若群聊被忽略, Bot将不会从该群聊抽取聊天记录来写说说。建议将信息比较敏感的群聊加入此列表",
-                "type": "list",
-                "default": []
-            },
-            "ignore_users": {
-                "description": "忽略的用户列表",
-                "type": "list",
-                "hint": "Bot在随机触发读说说时, 如果发现用户未开放空间, 则自动将该用户加入忽略列表, 下次不再处理该用户",
-                "default": []
-            },
-            "post_max_msg": {
-                "description": "用于写说说的聊天记录的最大条数",
-                "type": "int",
-                "hint": "过长会爆上下文, 一般几百条足矣",
-                "slider": {
-                    "min": 100,
-                    "max": 1000,
-                    "step": 10
-                },
-                "default": 500
-            }
-        }
-    },
-    "trigger": {
-        "description": "触发配置",
-        "type": "object",
-        "hint": "",
-        "items": {
-            "publish_cron": {
-                "description": "自动发说说的基准触发时间",
-                "type": "string",
-                "hint": "使用 Cron 表达式（分 时 日 月 周）定义基准时间。例如 “30 23 * * *” 表示每天 23:30 为基准点；实际执行时间 = 基准点 ± 偏移秒数（随机）。留空表示禁用此功能",
-                "default": "30 23 * * *"
-            },
-            "publish_offset": {
-                "description": "自动发说说的时间偏移（秒）",
-                "type": "int",
-                "hint": "基于基准触发时间做随机前后浮动。设为 600 表示会在基准触发时间前后 600 秒内随机触发；设为 0 则严格按 cron 时间触发",
-                "slider": {
-                    "min": 0,
-                    "max": 3600,
-                    "step": 1
-                },
-                "default": 600
-            },
-            "comment_cron": {
-                "description": "自动评论的基准触发时间",
-                "type": "string",
-                "hint": "注意此处评论的是 bot 好友们最近发的说说。使用 Cron 表达式定义基准时间；实际执行时间 = 基准点 ± 偏移秒数（随机）。留空表示禁用此功能",
-                "default": "0 8 * * *"
-            },
-            "comment_offset": {
-                "description": "自动评论的时间偏移（秒）",
-                "type": "int",
-                "hint": "基于基准触发时间做随机前后浮动。设为 600 表示会在基准触发时间前后 600 秒内随机触发；设为 0 则严格按 cron 时间触发",
-                "slider": {
-                    "min": 0,
-                    "max": 3600,
-                    "step": 1
-                },
-                "default": 600
-            },
-            "read_prob": {
-                "description": "聊天时触发评说说的概率",
-                "type": "float",
-                "hint": "用户在群聊、私聊时, Bot会随机评论说说。推荐设得非常小",
-                "slider": {
-                    "min": 0,
-                    "max": 1,
-                    "step": 0.0001
-                },
-                "default": 0.001
-            },
-            "send_admin": {
-                "description": "触发评说说时仅通知管理员",
-                "hint": "打开后, 渲染好的稿件将私发给bot管理员, 而不是直接发到群里",
-                "type": "bool",
-                "default": false
-            },
-            "like_when_comment": {
-                "description": "评说说时是否自动点赞",
-                "hint": "在评论完说说后会自动给此说说点赞",
-                "type": "bool",
-                "default": true
-            },
-            "like_only": {
-                "description": "【补丁】只点赞不评论",
-                "hint": "开启后，定时任务不再自动评论好友说说，只做点赞（点赞交给下面的「自动点赞」任务）。想恢复官方行为就关掉它",
-                "type": "bool",
-                "default": true
-            },
-            "like_cron": {
-                "description": "【补丁】自动点赞的基准触发时间",
-                "hint": "Cron 表达式（分 时 日 月 周）。留空表示禁用自动点赞。例如 “0 */2 * * *” 表示每 2 小时一次",
-                "type": "string",
-                "default": "0 */2 * * *"
-            },
-            "like_offset": {
-                "description": "【补丁】自动点赞的时间偏移（秒，对称 ±N）",
-                "hint": "围绕基准时间随机前后浮动。若下面两个不对称偏移项有值，则以它们为准",
-                "type": "int",
-                "slider": {
-                    "min": 0,
-                    "max": 3600,
-                    "step": 1
-                },
-                "default": 900
-            },
-            "like_offset_min": {
-                "description": "【补丁】随机偏移下限（秒，可为负）",
-                "hint": "与下行组成不对称随机区间。例如下限 -1800、上限 3600 = 每次在基准点基础上随机 −30 分钟 ~ +60 分钟，规律性比对称偏移更弱。0 表示不提前",
-                "type": "int",
-                "slider": {
-                    "min": -3600,
-                    "max": 0,
-                    "step": 60
-                },
-                "default": -1800
-            },
-            "like_offset_max": {
-                "description": "【补丁】随机偏移上限（秒，可为正）",
-                "hint": "与上行组成不对称随机区间。默认 3600 = 最多延后 60 分钟",
-                "type": "int",
-                "slider": {
-                    "min": 0,
-                    "max": 7200,
-                    "step": 60
-                },
-                "default": 3600
-            },
-            "like_num": {
-                "description": "【补丁】每轮最多点赞多少条动态",
-                "hint": "只处理动态流里最新的 N 条，已点过赞的会自动跳过（本地去重）",
-                "type": "int",
-                "slider": {
-                    "min": 1,
-                    "max": 50,
-                    "step": 1
-                },
-                "default": 20
-            },
-            "like_delay_min": {
-                "description": "【补丁】点赞最小间隔（秒）",
-                "hint": "每条点赞之间随机等待的秒数下限，防风控",
-                "type": "int",
-                "slider": {
-                    "min": 0,
-                    "max": 120,
-                    "step": 1
-                },
-                "default": 8
-            },
-            "like_delay_max": {
-                "description": "【补丁】点赞最大间隔（秒）",
-                "hint": "每条点赞之间随机等待的秒数上限，防风控",
-                "type": "int",
-                "slider": {
-                    "min": 0,
-                    "max": 300,
-                    "step": 1
-                },
-                "default": 20
-            },
-            "like_use_http_key": {
-                "description": "【补丁】点赞接口用 http 协议拼 unikey（已实测必须开启）",
-                "hint": "★ 默认开启。浏览器里的点赞按钮携带的 unikey 就是 http:// 开头（实测抓包确认）；用 https:// 时接口照样返回 succ 但服务端忽略，点赞静默失效。除非你确认环境不同，否则别关",
-                "type": "bool",
-                "default": true
-            }
-        }
-    },
-    "cookie_ttl": {
-        "description": "Cookie刷新TTL",
+      },
+      "api_key": {
+        "description": "【补丁】直连模型的 API Key",
+        "type": "string",
+        "hint": "只在服务器本地保存；控制台里填写更安全（会打码显示）",
+        "default": ""
+      },
+      "model": {
+        "description": "【补丁】直连模型的模型名",
+        "type": "string",
+        "hint": "例如 deepseek-chat、gpt-4o-mini",
+        "default": ""
+      }
+    }
+  },
+  "source": {
+    "description": "数据来源配置",
+    "type": "object",
+    "hint": "",
+    "items": {
+      "ignore_groups": {
+        "description": "忽略的群聊列表",
+        "hint": "若群聊被忽略, Bot将不会从该群聊抽取聊天记录来写说说。建议将信息比较敏感的群聊加入此列表",
+        "type": "list",
+        "default": []
+      },
+      "ignore_users": {
+        "description": "忽略的用户列表",
+        "type": "list",
+        "hint": "Bot在随机触发读说说时, 如果发现用户未开放空间, 则自动将该用户加入忽略列表, 下次不再处理该用户",
+        "default": []
+      },
+      "post_max_msg": {
+        "description": "用于写说说的聊天记录的最大条数",
         "type": "int",
-        "hint": "距离上次刷新超过该时长后，下次请求前会先调用 OneBot 的 get_login_info 刷新 Cookie，单位秒。设为 0 表示不按 TTL 主动刷新",
+        "hint": "过长会爆上下文, 一般几百条足矣",
         "slider": {
-            "min": 0,
-            "max": 86400,
-            "step": 60
+          "min": 100,
+          "max": 1000,
+          "step": 10
+        },
+        "default": 500
+      }
+    }
+  },
+  "trigger": {
+    "description": "触发配置",
+    "type": "object",
+    "hint": "",
+    "items": {
+      "publish_cron": {
+        "description": "自动发说说的基准触发时间",
+        "type": "string",
+        "hint": "使用 Cron 表达式（分 时 日 月 周）定义基准时间。例如 “30 23 * * *” 表示每天 23:30 为基准点；实际执行时间 = 基准点 ± 偏移秒数（随机）。留空表示禁用此功能",
+        "default": "30 23 * * *"
+      },
+      "publish_offset": {
+        "description": "自动发说说的时间偏移（秒）",
+        "type": "int",
+        "hint": "基于基准触发时间做随机前后浮动。设为 600 表示会在基准触发时间前后 600 秒内随机触发；设为 0 则严格按 cron 时间触发",
+        "slider": {
+          "min": 0,
+          "max": 3600,
+          "step": 1
         },
         "default": 600
-    },
-    "timeout": {
-        "description": "请求超时时间",
+      },
+      "comment_cron": {
+        "description": "自动评论的基准触发时间",
+        "type": "string",
+        "hint": "注意此处评论的是 bot 好友们最近发的说说。使用 Cron 表达式定义基准时间；实际执行时间 = 基准点 ± 偏移秒数（随机）。留空表示禁用此功能",
+        "default": "0 8 * * *"
+      },
+      "comment_offset": {
+        "description": "自动评论的时间偏移（秒）",
         "type": "int",
-        "hint": "网络请求的超时时间, 单位秒",
+        "hint": "基于基准触发时间做随机前后浮动。设为 600 表示会在基准触发时间前后 600 秒内随机触发；设为 0 则严格按 cron 时间触发",
         "slider": {
-            "min": 5,
-            "max": 60,
-            "step": 1
+          "min": 0,
+          "max": 3600,
+          "step": 1
         },
-        "default": 10
-    },
-    "show_name": {
-        "description": "是否显示昵称",
+        "default": 600
+      },
+      "read_prob": {
+        "description": "聊天时触发评说说的概率",
+        "type": "float",
+        "hint": "用户在群聊、私聊时, Bot会随机评论说说。推荐设得非常小",
+        "slider": {
+          "min": 0,
+          "max": 1,
+          "step": 0.0001
+        },
+        "default": 0.001
+      },
+      "send_admin": {
+        "description": "触发评说说时仅通知管理员",
+        "hint": "打开后, 渲染好的稿件将私发给bot管理员, 而不是直接发到群里",
         "type": "bool",
-        "hint": "通过稿件发布说说时, 是否在头部显示“【来自 xxx 的投稿】”，若是匿名投稿者，昵称会显示为“匿名者”",
+        "default": false
+      },
+      "like_when_comment": {
+        "description": "评说说时是否自动点赞",
+        "hint": "在评论完说说后会自动给此说说点赞",
+        "type": "bool",
         "default": true
+      },
+      "like_only": {
+        "description": "【补丁】只点赞不评论",
+        "hint": "开启后，定时任务不再自动评论好友说说，只做点赞（点赞交给下面的「自动点赞」任务）。想恢复官方行为就关掉它",
+        "type": "bool",
+        "default": true
+      },
+      "like_cron": {
+        "description": "【补丁】自动点赞的基准触发时间",
+        "hint": "Cron 表达式（分 时 日 月 周）。留空表示禁用自动点赞。例如 “0 */2 * * *” 表示每 2 小时一次",
+        "type": "string",
+        "default": "0 */2 * * *"
+      },
+      "like_offset": {
+        "description": "【补丁】自动点赞的时间偏移（秒，对称 ±N）",
+        "hint": "围绕基准时间随机前后浮动。若下面两个不对称偏移项有值，则以它们为准",
+        "type": "int",
+        "slider": {
+          "min": 0,
+          "max": 3600,
+          "step": 1
+        },
+        "default": 900
+      },
+      "like_offset_min": {
+        "description": "【补丁】随机偏移下限（秒，可为负）",
+        "hint": "与下行组成不对称随机区间。例如下限 -1800、上限 3600 = 每次在基准点基础上随机 −30 分钟 ~ +60 分钟，规律性比对称偏移更弱。0 表示不提前",
+        "type": "int",
+        "slider": {
+          "min": -3600,
+          "max": 0,
+          "step": 60
+        },
+        "default": -1800
+      },
+      "like_offset_max": {
+        "description": "【补丁】随机偏移上限（秒，可为正）",
+        "hint": "与上行组成不对称随机区间。默认 3600 = 最多延后 60 分钟",
+        "type": "int",
+        "slider": {
+          "min": 0,
+          "max": 7200,
+          "step": 60
+        },
+        "default": 3600
+      },
+      "like_num": {
+        "description": "【补丁】每轮最多点赞多少条动态",
+        "hint": "只处理动态流里最新的 N 条，已点过赞的会自动跳过（本地去重）",
+        "type": "int",
+        "slider": {
+          "min": 1,
+          "max": 50,
+          "step": 1
+        },
+        "default": 20
+      },
+      "like_delay_min": {
+        "description": "【补丁】点赞最小间隔（秒）",
+        "hint": "每条点赞之间随机等待的秒数下限，防风控",
+        "type": "int",
+        "slider": {
+          "min": 0,
+          "max": 120,
+          "step": 1
+        },
+        "default": 8
+      },
+      "like_delay_max": {
+        "description": "【补丁】点赞最大间隔（秒）",
+        "hint": "每条点赞之间随机等待的秒数上限，防风控",
+        "type": "int",
+        "slider": {
+          "min": 0,
+          "max": 300,
+          "step": 1
+        },
+        "default": 20
+      },
+      "like_use_http_key": {
+        "description": "【补丁】点赞接口用 http 协议拼 unikey（已实测必须开启）",
+        "hint": "★ 默认开启。浏览器里的点赞按钮携带的 unikey 就是 http:// 开头（实测抓包确认）；用 https:// 时接口照样返回 succ 但服务端忽略，点赞静默失效。除非你确认环境不同，否则别关",
+        "type": "bool",
+        "default": true
+      }
     }
+  },
+  "cookie_ttl": {
+    "description": "Cookie刷新TTL",
+    "type": "int",
+    "hint": "距离上次刷新超过该时长后，下次请求前会先调用 OneBot 的 get_login_info 刷新 Cookie，单位秒。设为 0 表示不按 TTL 主动刷新",
+    "slider": {
+      "min": 0,
+      "max": 86400,
+      "step": 60
+    },
+    "default": 600
+  },
+  "timeout": {
+    "description": "请求超时时间",
+    "type": "int",
+    "hint": "网络请求的超时时间, 单位秒",
+    "slider": {
+      "min": 5,
+      "max": 60,
+      "step": 1
+    },
+    "default": 10
+  },
+  "show_name": {
+    "description": "是否显示昵称",
+    "type": "bool",
+    "hint": "通过稿件发布说说时, 是否在头部显示“【来自 xxx 的投稿】”，若是匿名投稿者，昵称会显示为“匿名者”",
+    "default": true
+  }
 }

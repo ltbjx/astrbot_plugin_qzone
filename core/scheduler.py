@@ -239,6 +239,25 @@ class AutoLike(AutoRandomCronTask):
 
     _STORE_LIMIT = 2000
 
+    async def reschedule(self, seconds: int) -> str:
+        """控制台用：把下一轮执行时间改成「从现在起 N 秒后」"""
+        seconds = max(10, int(seconds))
+        try:
+            self.scheduler.remove_all_jobs()
+        except Exception:
+            pass
+        target = datetime.now(self.timezone) + timedelta(seconds=seconds)
+        self.scheduler.add_job(
+            func=self._run_task_wrapper,
+            trigger=DateTrigger(run_date=target, timezone=self.timezone),
+            name=f"{self.job_name}_manual_{int(target.timestamp())}",
+            max_instances=1,
+            misfire_grace_time=3600,
+            coalesce=True,
+        )
+        logger.info(f"[AutoLike] 已手动调整下次执行时间：{target}")
+        return target.isoformat()
+
     async def run_now(self) -> None:
         """控制台「立即点赞」用：跳过调度，直接跑一轮"""
         logger.info("[AutoLike] 收到控制台指令，立即执行一轮")

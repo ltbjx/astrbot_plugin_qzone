@@ -1,4 +1,5 @@
 import copy
+import json
 import random
 import re
 from typing import Any
@@ -240,10 +241,64 @@ class LLMAction:
         except Exception as e:
             raise ValueError(f"LLM 调用失败：{e}")
 
+    async def _direct_chat(self, system_prompt: str, user_prompt: str) -> str | None:
+        """直连 OpenAI 兼容接口。控制台里填了 api_base/api_key/model 就走这里。"""
+        base = str(getattr(self.cfg.llm, "api_base", "") or "").strip().rstrip("/")
+        key = str(getattr(self.cfg.llm, "api_key", "") or "").strip()
+        model = str(getattr(self.cfg.llm, "model", "") or "").strip()
+        if not (base and key and model):
+            return None
+
+        import aiohttp
+
+        url = f"{base}/chat/completions"
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.8,
+        }
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            timeout = aiohttp.ClientTimeout(total=int(self.cfg.timeout or 20) + 20)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(url, json=payload, headers=headers) as resp:
+                    text = await resp.text()
+                    if resp.status != 200:
+                        logger.error(f"[直连LLM] HTTP {resp.status}: {text[:200]}")
+                        return None
+                    data = json.loads(text)
+                    return (
+                        data.get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content", "")
+                        .strip()
+                    )
+        except Exception as e:
+            logger.error(f"[直连LLM] 调用失败：{e}")
+            return None
+
     async def generate_comment(
         self, post: Post, *, event: Any | None = None
     ) -> str | None:
-        """根据帖子内容生成评论"""
+        """根据帖子内容生成评论（优先用控制台配置的直连模型）"""
+        # ① 控制台填了 api_base/api_key/model → 直连
+        text = (post.text or "") + (f"\n[转发]\n{post.rt_con}" if post.rt_con else "")
+        direct = await self._direct_chat(
+            self.cfg.llm.comment_prompt
+            + "\n\n# 输出要求\n只输出最终评论内容，不要解释，不要分点，不要加前缀。",
+            f"[帖子内容]\n{text}\n\n[作者]\n{post.name}",
+        )
+        if direct:
+            logger.info(f"[直连LLM] 生成评论：{direct[:40]}")
+            return direct
+        # ② 否则回退到 AstrBot 的 provider 体系
+
         provider = self._get_provider(self.cfg.llm.comment_provider_id, event)
         if not isinstance(provider, Provider):
             logger.error("未配置用于文本生成任务的 LLM 提供商")

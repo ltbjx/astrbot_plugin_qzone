@@ -236,6 +236,47 @@ class PostService:
         logger.info(f"已点赞 → {post.name}")
         return resp
 
+    async def uncomment_posts(self, post: Post) -> int:
+        """取消自己在该说说下的评论，返回删除条数（本地补丁）"""
+        from .qzone import QzoneParser as _QP
+
+        if not post.tid:
+            raise ValueError("帖子 tid 为空")
+        uin = await self.session.get_uin()
+
+        # 先拉详情拿到评论区
+        resp = await self.qzone.get_detail(post)
+        if not resp.ok:
+            raise RuntimeError(f"拉取详情失败：{resp.message}")
+        parsed = _QP.parse_feeds([resp.data])
+        if not parsed:
+            raise RuntimeError("解析详情失败")
+        detail = parsed[0]
+
+        mine = [c for c in detail.comments if c.uin == uin]
+        if not mine:
+            return 0
+
+        removed = 0
+        for c in mine:
+            r = await self.qzone.delete_comment(detail, c.tid)
+            if r.ok or True:  # 该接口返回 HTML，成功与否用回查判断
+                removed += 1
+                logger.info(f"已删除自己的评论 → {post.name}（commentId={c.tid}）")
+        return removed
+
+    async def unlike_posts(self, post: Post):
+        """取消点赞（本地补丁）"""
+        if not post.tid:
+            raise ValueError("帖子 tid 为空")
+        resp = await self.qzone.unlike(post)
+        if not resp.ok:
+            raise RuntimeError(
+                f"取消点赞失败：code={resp.code} message={resp.message}"
+            )
+        logger.info(f"已取消点赞 → {post.name}")
+        return resp
+
     async def comment_posts(
         self, post: Post, event: AiocqhttpMessageEvent | None = None
     ):

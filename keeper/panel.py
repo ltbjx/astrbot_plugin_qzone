@@ -801,3 +801,148 @@ def remove_blacklist(uin: str) -> tuple[bool, str]:
         return False, f"写入失败：{e}"
     record_action("黑名单", f"移除 {uin}")
     return True, f"已移出黑名单：{uin}"
+
+
+# --------------------------------------------------------------------------- #
+# 指令通道：控制台 → 插件（写 cmd.json，读 cmd_result.json）
+# 为什么不直接调接口：拉动态/点赞/评论都需要插件里的登录态和 LLM，面板没有
+# --------------------------------------------------------------------------- #
+CMD_FILE = OUT_DIR / "cmd.json"
+RESULT_FILE = OUT_DIR / "cmd_result.json"
+
+
+def send_cmd(cmd: dict, timeout: float = 50.0) -> dict:
+    rid = secrets.token_hex(6)
+    payload = {**cmd, "id": rid}
+    try:
+        RESULT_FILE.unlink()
+    except Exception:
+        pass
+    try:
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = CMD_FILE.with_name("cmd.tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(CMD_FILE)
+    except Exception as e:
+        return {"id": rid, "ok": False, "message": f"下发失败：{e}"}
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        time.sleep(0.4)
+        try:
+            if RESULT_FILE.is_file():
+                res = json.loads(RESULT_FILE.read_text(encoding="utf-8"))
+                if res.get("id") == rid:
+                    record_action(
+                        "指令",
+                        f"{cmd.get('cmd')} → {'成功' if res.get('ok') else '失败'}"
+                        f"（{str(res.get('message') or '')[:40]}）",
+                    )
+                    return res
+        except Exception:
+            continue
+    return {"id": rid, "ok": False, "message": "插件未在 50 秒内响应（可能正在重启或未加载）"}
+
+
+def fetch_posts(n: int = 5) -> dict:
+    return send_cmd({"cmd": "fetch", "n": n}, timeout=30)
+
+
+def post_action(action: str, item: dict) -> dict:
+    return send_cmd(
+        {
+            "cmd": action,
+            "tid": item.get("tid"),
+            "uin": item.get("uin"),
+            "name": item.get("name"),
+            "text": item.get("text"),
+        },
+        timeout=60,
+    )
+
+
+def reschedule(minutes: float) -> dict:
+    seconds = int(max(0.2, float(minutes)) * 60)
+    return send_cmd({"cmd": "reschedule", "seconds": seconds}, timeout=20)
+
+
+# --------------------------------------------------------------------------- #
+# AI 模型配置（直连 OpenAI 兼容接口）
+# --------------------------------------------------------------------------- #
+def get_llm_config() -> dict:
+    cfg = load_config()
+    llm = cfg.get("llm") or {}
+    key = str(llm.get("api_key") or "")
+    return {
+        "api_base": llm.get("api_base") or "",
+        "model": llm.get("model") or "",
+        "api_key_set": bool(key),
+        "api_key_masked": (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("已设置" if key else ""),
+        "comment_prompt": llm.get("comment_prompt") or "",
+    }
+
+
+def save_llm_config(data: dict) -> tuple[bool, str]:
+    cfg = load_config()
+    if not cfg:
+        return False, "读不到插件配置"
+    llm = cfg.setdefault("llm", {})
+    base = str(data.get("api_base") or "").strip().rstrip("/")
+    model = str(data.get("model") or "").strip()
+    key = str(data.get("api_key") or "").strip()
+
+    if base and not (base.startswith("http://") or base.startswith("https://")):
+        return False, "接口地址要以 http:// 或 https:// 开头"
+    llm["api_base"] = base
+    llm["model"] = model
+    if key and not key.startswith("••"):
+        llm["api_key"] = key          # 留空表示不修改
+    if data.get("comment_prompt") is not None:
+        llm["comment_prompt"] = str(data.get("comment_prompt") or "").strip()
+
+    try:
+        _write_config(cfg)
+        _flag("reload.flag")
+    except Exception as e:
+        return False, f"保存失败：{e}"
+
+    record_action("模型", f"更新模型配置：{model or '未命名'}（{base or '未填地址'}）")
+    return True, "已保存，AI 评论将使用这个模型"
+
+
+def test_llm_config() -> tuple[bool, str]:
+    """用当前配置请求一次模型，验证 Key 是否可用"""
+    cfg = load_config()
+    llm = cfg.get("llm") or {}
+    base = str(llm.get("api_base") or "").strip().rstrip("/")
+    key = str(llm.get("api_key") or "").strip()
+    model = str(llm.get("model") or "").strip()
+    if not (base and key and model):
+        return False, "还没填完整（接口地址 / Key / 模型名）"
+
+    import urllib.error
+    import urllib.request
+
+    body = json.dumps(
+        {
+            "model": model,
+            "messages": [{"role": "user", "content": "回复两个字：可用"}],
+            "max_tokens": 8,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        f"{base}/chat/completions",
+        data=body,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+        txt = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        return True, f"模型可用，返回：{str(txt).strip()[:20]}"
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:160]
+        return False, f"HTTP {e.code}：{detail}"
+    except Exception as e:
+        return False, f"连接失败：{e}"

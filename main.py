@@ -89,6 +89,8 @@ class QzonePlugin(Star):
         data_dir = Path(self.cfg.data_dir)
         like_flag = data_dir / "like_now.flag"
         reload_flag = data_dir / "reload.flag"
+        cmd_path = data_dir / "cmd.json"
+        result_path = data_dir / "cmd_result.json"
         logger.info(f"[控制台] 指令监听已启动（目录：{data_dir}）")
 
         while True:
@@ -106,6 +108,26 @@ class QzonePlugin(Star):
                     else:
                         logger.warning("[控制台] 自动点赞任务未启用（like_cron 为空）")
 
+                if cmd_path.exists():
+                    cmd = None
+                    try:
+                        raw = cmd_path.read_text(encoding="utf-8")
+                        cmd = json.loads(raw) if raw.strip() else None
+                    except Exception as e:
+                        logger.warning(f"[控制台] 指令解析失败：{e}")
+                    try:
+                        cmd_path.unlink()
+                    except OSError:
+                        pass
+                    if isinstance(cmd, dict) and cmd.get("cmd"):
+                        result = await self._run_control_cmd(cmd)
+                        try:
+                            result_path.write_text(
+                                json.dumps(result, ensure_ascii=False), encoding="utf-8"
+                            )
+                        except Exception as e:
+                            logger.warning(f"[控制台] 结果写盘失败：{e}")
+
                 if reload_flag.exists():
                     try:
                         reload_flag.unlink()
@@ -119,6 +141,98 @@ class QzonePlugin(Star):
                 raise
             except Exception as e:
                 logger.warning(f"[控制台] 指令处理异常：{e}")
+
+    @staticmethod
+    def _extract_islike(raw: dict) -> dict[str, int]:
+        """从动态流原始数据里抠出每条动态的真实点赞状态（data-islike）"""
+        import re as _re
+
+        try:
+            blob = json.dumps(raw, ensure_ascii=False).replace('\\"', '"')
+        except Exception:
+            return {}
+        out: dict[str, int] = {}
+        for m in _re.finditer(
+            r'data-islike="(\d)"[^>]{0,240}?data-unikey="([^"]+)"', blob
+        ):
+            try:
+                il = int(m.group(1))
+            except ValueError:
+                continue
+            mm = _re.search(r"user\.qzone\.qq\.com/(\d+)/mood/([0-9a-zA-Z]+)", m.group(2))
+            if mm:
+                out[mm.group(2)] = il
+        return out
+
+    def _post_from_cmd(self, cmd: dict) -> Post:
+        return Post(
+            tid=str(cmd.get("tid") or ""),
+            uin=int(cmd.get("uin") or 0),
+            name=str(cmd.get("name") or ""),
+            text=str(cmd.get("text") or ""),
+        )
+
+    async def _run_control_cmd(self, cmd: dict) -> dict:
+        """执行控制台下发的单条指令，返回结构化结果"""
+        kind = str(cmd.get("cmd") or "")
+        rid = cmd.get("id")
+        try:
+            if kind == "fetch":
+                n = max(1, min(int(cmd.get("n") or 5), 20))
+                resp = await self.qzone.get_recent_feeds()
+                if not resp.ok:
+                    return {"id": rid, "ok": False, "message": f"拉取动态失败：{resp.message}"}
+                posts = QzoneParser.parse_recent_feeds(resp.data)[:n]
+                liked_map = self._extract_islike(resp.data)
+                items = [
+                    {
+                        "tid": p.tid,
+                        "uin": p.uin,
+                        "name": p.name,
+                        "text": (p.text or "")[:300],
+                        "time": p.create_time,
+                        "liked": liked_map.get(p.tid, -1),
+                    }
+                    for p in posts
+                    if p.tid
+                ]
+                return {"id": rid, "ok": True, "message": f"拉到 {len(items)} 条",
+                        "data": {"posts": items}}
+
+            # 不需要 tid/uin 的指令先处理（否则会被下面的校验拦下）
+            if kind == "reschedule":
+                seconds = int(cmd.get("seconds") or 0)
+                if self.auto_like is None:
+                    return {"id": rid, "ok": False, "message": "自动点赞未启用（like_cron 为空）"}
+                target = await self.auto_like.reschedule(seconds)
+                return {"id": rid, "ok": True, "message": "已调整下次执行时间",
+                        "data": {"target": target}}
+
+            post = self._post_from_cmd(cmd)
+            if not post.tid or not post.uin:
+                return {"id": rid, "ok": False, "message": "缺少 tid 或 uin"}
+
+            if kind == "like":
+                await self.service.like_posts(post)
+                return {"id": rid, "ok": True, "message": f"已点赞：{post.name or post.uin}"}
+
+            if kind == "unlike":
+                await self.service.unlike_posts(post)
+                return {"id": rid, "ok": True, "message": f"已取消点赞：{post.name or post.uin}"}
+
+            if kind == "comment":
+                await self.service.comment_posts(post)
+                return {"id": rid, "ok": True, "message": f"已评论：{post.name or post.uin}"}
+
+            if kind == "uncomment":
+                n = await self.service.uncomment_posts(post)
+                return {"id": rid, "ok": True,
+                        "message": f"删除了 {n} 条自己的评论" if n else "这条动态下没有你的评论"}
+
+            return {"id": rid, "ok": False, "message": f"未知指令：{kind}"}
+        except Exception as e:
+            logger.exception(f"[控制台] 指令 {kind} 执行失败")
+            return {"id": rid, "ok": False, "message": f"{type(e).__name__}: {e}"}
 
     async def _reload_config(self) -> None:
         """从磁盘重读插件配置并重建自动点赞任务（cron / 偏移在构造时读取）"""

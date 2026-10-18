@@ -377,6 +377,13 @@
         <div class="meta" id="nextMeta">正在读取排期…</div>
       </div>
       <div class="chips" id="chips"></div>
+      <div class="row" style="margin-top:16px">
+        <input id="reschInput" type="number" min="1" step="1" value="30"
+               style="max-width:110px" inputmode="numeric">
+        <button class="ghost mini" id="btnResch">改成 N 分钟后执行</button>
+        <button class="ghost mini" id="btnRunNow">马上执行一次</button>
+      </div>
+      <div class="msg" id="reschMsg"></div>
     </section>
 
     <section class="card c4">
@@ -447,10 +454,43 @@
       <div class="hint">名单里的 QQ 发动态时不会被点赞。可填 QQ 号，加完能看到最近用过的昵称。</div>
     </section>
 
-    <section class="card c6">
+    <section class="card c4">
       <h2>信任设备</h2>
       <div id="devList" class="hint" style="margin:0">加载中…</div>
       <div class="hint">在这些设备上输对过密码，之后打开面板自动进入。发现陌生设备就点「撤销」。</div>
+    </section>
+
+    <section class="card c8">
+      <h2>最近动态</h2>
+      <div class="row" style="margin-bottom:6px">
+        <button class="ghost mini" id="btnFetchPosts">拉取最近 5 条</button>
+        <span class="hint" style="margin:0">每一位都可以单独点赞 / 取消赞 / AI 评论 / 删评论</span>
+      </div>
+      <div id="postList" class="hint" style="margin:0">还没有拉取，点上方按钮</div>
+    </section>
+
+    <section class="card">
+      <h2>AI 模型（用于自动 / 手动评论）</h2>
+      <form id="llmForm" class="grid2">
+        <label>接口地址（OpenAI 兼容）
+          <input id="llmBase" placeholder="https://api.deepseek.com/v1" autocomplete="off" spellcheck="false">
+        </label>
+        <label>模型名
+          <input id="llmModel" placeholder="deepseek-chat" autocomplete="off" spellcheck="false">
+        </label>
+        <label>API Key
+          <input id="llmKey" type="password" placeholder="留空表示不修改" autocomplete="off">
+        </label>
+        <label>评论提示词（可选）
+          <input id="llmPrompt" placeholder="生成一句简短、贴题的评论" autocomplete="off">
+        </label>
+      </form>
+      <div class="row" style="margin-top:14px">
+        <button id="btnSaveLLM">保存模型</button>
+        <button class="ghost mini" id="btnTestLLM">测试连接</button>
+        <span class="hint" id="llmState" style="margin:0"></span>
+      </div>
+      <div class="msg" id="llmMsg"></div>
     </section>
 
     <section class="card c6 hidden" id="qrCard">
@@ -790,7 +830,137 @@ async function removeBl(uin){
 $('btnBlAdd').onclick = addBl;
 $('blInput').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); addBl(); } });
 
-loadState(); loadLogs(); loadDevices(); loadBlacklist();
+
+/* ───────── 最近动态 + 单条操作 ───────── */
+let posts = [];
+
+function fmtTime(ts){
+  if(!ts) return '';
+  const d = new Date(ts*1000);
+  return d.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false});
+}
+
+function renderPosts(){
+  const box = $('postList');
+  if(!posts.length){
+    box.innerHTML = '<span style="color:var(--label-3)">没有拉到动态，点「拉取最近 5 条」</span>';
+    return;
+  }
+  box.innerHTML = posts.map((v, i) => {
+    const likeState = v.liked === 1 ? '已赞' : (v.liked === 0 ? '未赞' : '未知');
+    const likeCls = v.liked === 1 ? 'blue' : (v.liked === 0 ? 'red' : '');
+    return `
+    <div style="padding:12px 0;border-bottom:.5px solid var(--separator)">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+        <div style="font-size:.9375rem;font-weight:500;letter-spacing:-.006em;color:var(--label)">
+          ${v.name || v.uin}
+          <span class="chip ${likeCls}" style="margin-left:6px;font-size:.6875rem">${likeState}</span>
+        </div>
+        <div style="font-size:.75rem;color:var(--label-3)">${fmtTime(v.time)}</div>
+      </div>
+      <div style="font-size:.8125rem;color:var(--label-2);margin:6px 0 10px;line-height:1.5;
+                  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
+        ${(v.text || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) || '<i>（无文字）</i>'}
+      </div>
+      <div class="row" style="gap:6px">
+        <button class="ghost mini" onclick="postAct('like',${i})">点赞</button>
+        <button class="ghost mini" onclick="postAct('unlike',${i})">取消赞</button>
+        <button class="ghost mini" onclick="postAct('comment',${i})">AI 评论</button>
+        <button class="ghost mini" onclick="postAct('uncomment',${i})">删我的评论</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadPosts(){
+  $('btnFetchPosts').disabled = true;
+  $('postList').innerHTML = '<span style="color:var(--label-3)">正在拉取…</span>';
+  try{
+    const r = await fetch('/api/posts?n=5', {cache:'no-store'});
+    const d = await r.json();
+    if(!d.ok){ $('postList').innerHTML = `<span style="color:#C0261C">${d.message}</span>`; return; }
+    posts = (d.data && d.data.posts) || [];
+    renderPosts();
+  }catch(e){
+    $('postList').innerHTML = '<span style="color:#C0261C">拉取失败：' + e + '</span>';
+  }finally{ $('btnFetchPosts').disabled = false; }
+}
+
+async function postAct(action, idx){
+  const p = posts[idx];
+  if(!p) return;
+  const names = {like:'点赞', unlike:'取消赞', comment:'AI 评论', uncomment:'删除我的评论'};
+  act(names[action] + '中…');
+  try{
+    const r = await post('/api/post-action', {action, tid:p.tid, uin:p.uin, name:p.name, text:p.text});
+    act(r.message, r.ok ? 'ok' : 'err');
+    if(r.ok && (action === 'like' || action === 'unlike')){
+      p.liked = action === 'like' ? 1 : 0;
+      renderPosts();
+    }
+  }catch(e){ act('失败：' + e, 'err'); }
+}
+
+$('btnFetchPosts').onclick = loadPosts;
+
+/* ───────── 调整下一次执行时间 ───────── */
+async function doReschedule(){
+  const mins = Number($('reschInput').value || 0);
+  if(!(mins > 0)){ $('reschMsg').className = 'msg err'; $('reschMsg').textContent = '请填大于 0 的分钟数'; return; }
+  $('reschMsg').className = 'msg';
+  $('reschMsg').textContent = '正在下发…';
+  try{
+    const d = await post('/api/reschedule', {minutes: mins});
+    $('reschMsg').className = 'msg ' + (d.ok ? 'ok' : 'err');
+    $('reschMsg').textContent = d.ok ? `已改成 ${mins} 分钟后执行` : d.message;
+    if(d.ok) setTimeout(loadState, 1500);
+  }catch(e){ $('reschMsg').className = 'msg err'; $('reschMsg').textContent = '失败：' + e; }
+}
+
+$('btnResch').onclick = doReschedule;
+$('btnRunNow').onclick = doLike;
+
+/* ───────── AI 模型配置 ───────── */
+async function loadLLM(){
+  try{
+    const d = await (await fetch('/api/llm-config', {cache:'no-store'})).json();
+    const l = d.llm || {};
+    $('llmBase').value = l.api_base || '';
+    $('llmModel').value = l.model || '';
+    $('llmPrompt').value = l.comment_prompt || '';
+    $('llmKey').placeholder = l.api_key_set ? ('已设置：' + (l.api_key_masked || '')) : '留空表示不修改';
+    $('llmState').textContent = l.model ? `当前：${l.model}` : '还没配置模型';
+  }catch(e){}
+}
+
+async function saveLLM(){
+  $('llmMsg').className = 'msg'; $('llmMsg').textContent = '保存中…';
+  try{
+    const d = await post('/api/llm-config', {
+      api_base: $('llmBase').value.trim(),
+      model: $('llmModel').value.trim(),
+      api_key: $('llmKey').value.trim(),
+      comment_prompt: $('llmPrompt').value.trim(),
+    });
+    $('llmMsg').className = 'msg ' + (d.ok ? 'ok' : 'err');
+    $('llmMsg').textContent = d.message;
+    if(d.ok){ $('llmKey').value = ''; loadLLM(); }
+  }catch(e){ $('llmMsg').className = 'msg err'; $('llmMsg').textContent = '失败：' + e; }
+}
+
+async function testLLM(){
+  $('llmMsg').className = 'msg'; $('llmMsg').textContent = '正在测试…';
+  try{
+    const d = await post('/api/llm-test');
+    $('llmMsg').className = 'msg ' + (d.ok ? 'ok' : 'err');
+    $('llmMsg').textContent = d.message;
+  }catch(e){ $('llmMsg').className = 'msg err'; $('llmMsg').textContent = '失败：' + e; }
+}
+
+$('btnSaveLLM').onclick = saveLLM;
+$('btnTestLLM').onclick = testLLM;
+
+loadState(); loadLogs(); loadDevices(); loadBlacklist(); loadLLM();
 setInterval(loadState, 5000);
 setInterval(loadDevices, 30000);
 setInterval(loadBlacklist, 30000);
