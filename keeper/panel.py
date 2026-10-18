@@ -944,7 +944,16 @@ def test_llm_config() -> tuple[bool, str]:
         txt = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
         return True, f"模型可用，返回：{str(txt).strip()[:20]}"
     except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:160]
-        return False, f"HTTP {e.code}：{detail}"
+        raw = e.read().decode("utf-8", "replace")
+        # 403 + HTML 页面 = 地址填的是官网/网关，不是模型接口
+        if e.code == 403 and "<html" in raw.lower():
+            return False, "地址填错了：这是网站页面不是模型接口。DeepSeek 请用 https://api.deepseek.com/v1"
+        if e.code == 401:
+            return False, "Key 无效或已过期（401）。如果是中转站，地址要填中转站自己的地址"
+        if e.code == 404:
+            return False, "接口路径不存在（404）。地址一般以 /v1 结尾，例如 https://api.deepseek.com/v1"
+        if e.code == 429:
+            return False, "请求太频繁或额度用完（429）"
+        return False, f"HTTP {e.code}：{raw[:160]}"
     except Exception as e:
         return False, f"连接失败：{e}"
