@@ -893,8 +893,10 @@ def save_llm_config(data: dict) -> tuple[bool, str]:
 
     if base and not (base.startswith("http://") or base.startswith("https://")):
         return False, "接口地址要以 http:// 或 https:// 开头"
-    llm["api_base"] = base
-    llm["model"] = model
+    if "api_base" in data:
+        llm["api_base"] = base
+    if "model" in data:
+        llm["model"] = model
     if key and not key.startswith("••"):
         llm["api_key"] = key          # 留空表示不修改
     if data.get("comment_prompt") is not None:
