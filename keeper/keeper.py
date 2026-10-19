@@ -718,8 +718,13 @@ async def wait_for_login(page, ctx) -> None:
         log(f"打开登录页失败：{e}")
 
     last_src = ""
+    last_capture = 0.0
     reloaded_at = time.time()
-    scan_warned = False
+
+    # QQ 登录二维码寿命只有约 2 分钟，而页面不一定自己轮换 src，
+    # 所以这里主动节奏：每 30 秒抓一次，每 90 秒整页重载一次强制出新码。
+    CAPTURE_EVERY = 30
+    RELOAD_EVERY = 90
 
     while True:
         await asyncio.sleep(2)
@@ -730,26 +735,36 @@ async def wait_for_login(page, ctx) -> None:
             panel_mod.record_action("扫码", "扫码登录成功")
             return
 
-        # 二维码换了才重新抓（避免把用户正在扫的那张存成旧的）
+        now = time.time()
+
+        # ① src 变了 → 立刻抓（页面自己轮换时能跟上）
         src = await current_qr_src(page)
         if src and src != last_src:
-            ok = await capture_qr(page)
             last_src = src
-            with _lock:
-                nbytes = _state.get("qr_bytes", 0)
-            if ok or nbytes:
+            if await capture_qr(page):
+                with _lock:
+                    nbytes = _state.get("qr_bytes", 0)
                 log(f"二维码已更新（{nbytes} 字节）")
-                scan_warned = False
+                last_capture = now
 
-        # 超过 5 分钟还没登上，重载一次页面拿新二维码（页面可能自己卡死了）
-        if time.time() - reloaded_at > 300:
-            log("等待超时 5 分钟，重载登录页以刷新二维码")
+        # ② 兜底：每 30 秒强制抓一次
+        elif now - last_capture >= CAPTURE_EVERY:
+            if await capture_qr(page):
+                with _lock:
+                    nbytes = _state.get("qr_bytes", 0)
+                log(f"二维码定时刷新（{nbytes} 字节）")
+                last_capture = now
+
+        # ③ 每 90 秒整页重载，强制生成全新二维码
+        if now - reloaded_at >= RELOAD_EVERY:
             try:
                 await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=60000)
+                log("已重载登录页，生成新二维码")
             except Exception as e:
                 log(f"重载登录页失败：{e}")
             last_src = ""
-            reloaded_at = time.time()
+            last_capture = 0.0
+            reloaded_at = now
 
 
 async def keepalive_loop(page, ctx) -> None:

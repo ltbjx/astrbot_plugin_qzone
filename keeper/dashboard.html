@@ -961,6 +961,15 @@ $('btnSaveLLM').onclick = saveLLM;
 $('btnTestLLM').onclick = testLLM;
 
 loadState(); loadLogs(); loadDevices(); loadBlacklist(); loadLLM();
+
+/* 二维码自动刷新：QQ 二维码约 2 分钟过期，这里每 15 秒重新拉一次 */
+setInterval(() => {
+  const card = $('qrCard');
+  const img = $('qr');
+  if (card && img && !card.classList.contains('hidden')) {
+    img.src = '/qr.png?t=' + Date.now();
+  }
+}, 15000);
 setInterval(loadState, 5000);
 setInterval(loadDevices, 30000);
 setInterval(loadBlacklist, 30000);
