@@ -207,3 +207,5 @@ astrbot_plugin_qzone/
   > 📌 上游 README 的徽章写的是 MIT，但仓库里的 `LICENSE` 文件实际是 **GPL-3.0**。以文件为准，本 Fork 因此同样采用 GPL-3.0。
 - 上游作者：**Zhalslar**；表白墙部分参考了 [CampuxBot](https://github.com/idoknow/CampuxBot)
 - 本 Fork 的排查、补丁与文档：由 **AI Agent（DeepSeek Harness）** 在真机联调中完成，详见 [NOTICE](./NOTICE)
+
+#本插件借助deepseekv4开发
