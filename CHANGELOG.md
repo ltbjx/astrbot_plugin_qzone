@@ -142,3 +142,5 @@ Bug 修复：
 - Refactor: 将 HTTP 状态注入到内部元数据 `__qzone_internal__.http_status`，并在 `ApiResponse.data` 中剥离内部字段，避免与业务字段冲突。
 - Improve: 统一错误消息常量为中文（如“响应内容为空”“权限不足”），更符合插件用户使用场景。
 - Behavior: 保持无参数调用默认行为为查询最新一条说说（`pos=0, num=1`）。
+
+#项目借助deepseekv4.1开发
