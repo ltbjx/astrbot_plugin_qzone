@@ -208,4 +208,4 @@ astrbot_plugin_qzone/
 - 上游作者：**Zhalslar**；表白墙部分参考了 [CampuxBot](https://github.com/idoknow/CampuxBot)
 - 本 Fork 的排查、补丁与文档：由 **AI Agent（DeepSeek Harness）** 在真机联调中完成，详见 [NOTICE](./NOTICE)
 
-#本插件借助deepseekv4开发
+#本插件借助deepseekv4开发.
